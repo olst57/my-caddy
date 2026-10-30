@@ -82,7 +82,10 @@ jobs:
             [ -f "$f" ] || { echo "::error::missing $f"; exit 1; }
             file "$f"
           done
-          sha256sum -c dist/SHA256SUMS
+          # SHA256SUMS lists bare filenames, so the check has to run from the
+          # directory that holds them. Running it from the repo root makes
+          # sha256sum look for ./caddy-linux-amd64 and report a false failure.
+          ( cd dist && sha256sum -c SHA256SUMS )
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: caddy-linux
