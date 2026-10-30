@@ -1,0 +1,13 @@
+# Build outputs and scratch state. Artifacts belong in CI, not in git.
+dist/
+.build/
+.gate/
+
+# Local secrets. Real values never enter the repository; only .env.example
+# (all placeholders) is tracked.
+.env
+.env.local
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db

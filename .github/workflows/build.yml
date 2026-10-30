@@ -1,0 +1,123 @@
+name: build
+
+# Sprint 2: reproducible build producing both architecture artifacts.
+#
+# Gate 0 (gate0.yml) must pass first. This workflow therefore reruns the gate
+# conditions as a cheap pre-flight job rather than trusting a previous run's
+# colour, so a red build here cannot be mistaken for "the gate was fine
+# yesterday". The expensive part (two cross-compiled caddy builds) only starts
+# once the pre-flight job is green.
+#
+# Scope: this workflow builds artifacts and checksums. It does not publish a
+# release, sign anything, build a container image, or produce Windows/macOS
+# binaries; those are out of v4 scope.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/**'
+      - 'patches/**'
+      - '.github/workflows/build.yml'
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+env:
+  CADDY_TAG: v2.11.7
+  GO_VERSION: 1.26.x
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Pre-flight: the three gate conditions, in the cheapest form that still
+  # proves them. A green run here is not a substitute for the full gate0
+  # workflow; it is a guard against building on a broken premise.
+  # ---------------------------------------------------------------------------
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Exactly one patch, and it applies cleanly
+        run: |
+          set -euo pipefail
+          n=$(find patches -maxdepth 1 -name '*.patch' -type f | wc -l)
+          echo "patch files: $n"
+          [ "$n" -eq 1 ] || { echo "::error::patches/ must hold exactly 1 patch, found $n"; exit 1; }
+          git clone --depth 1 --branch "$CADDY_TAG" https://github.com/caddyserver/caddy.git .build/caddy-src
+          git -C .build/caddy-src apply --check "$PWD/patches/caddy-read-idle-timeout.patch"
+          git -C .build/caddy-src apply "$PWD/patches/caddy-read-idle-timeout.patch"
+          git -C .build/caddy-src diff --stat
+          grep -q 'github.com/quic-go/quic-go v0.63.0' .build/caddy-src/go.mod
+          echo "preflight: patch applies, quic-go pin intact"
+
+  build:
+    needs: preflight
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Toolchain
+        run: |
+          go version
+          git --version
+      - name: Build both architectures
+        run: bash scripts/build.sh --arch all
+      - name: Show checksums and pins
+        run: |
+          cat dist/SHA256SUMS
+          cat dist/pins.txt
+      - name: Verify artifact set
+        run: |
+          set -euo pipefail
+          for a in amd64 arm64; do
+            f="dist/caddy-linux-$a"
+            [ -f "$f" ] || { echo "::error::missing $f"; exit 1; }
+            file "$f"
+          done
+          sha256sum -c dist/SHA256SUMS
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: caddy-linux
+          path: |
+            dist/caddy-linux-amd64
+            dist/caddy-linux-arm64
+            dist/SHA256SUMS
+            dist/pins.txt
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Attach artifacts to a GitHub release when the trigger is a release. Only
+  # upload; no signing, no SBOM, no image build (out of v4 scope).
+  # ---------------------------------------------------------------------------
+  publish:
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/download-artifact@v4
+        with:
+          name: caddy-linux
+          path: dist
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          ls -l dist
+          gh release upload "${GITHUB_REF_NAME}" \
+            dist/caddy-linux-amd64 \
+            dist/caddy-linux-arm64 \
+            dist/SHA256SUMS \
+            dist/pins.txt \
+            --clobber
