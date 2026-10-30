@@ -1,0 +1,17 @@
+# Everything in this repo is consumed on Linux (GitHub Actions runners, and the
+# Caddy/xray hosts). A CRLF anywhere breaks two things outright: bash scripts
+# fail with "bad interpreter: /usr/bin/env bash^M", and `git apply` rejects the
+# patch because the context lines no longer match a LF working tree. Pin LF for
+# every text file and never let the client's core.autocrlf rewrite it.
+* text=auto eol=lf
+
+# Patch files must be byte-identical to their upstream origin, so they are
+# excluded from any normalisation whatsoever.
+*.patch -text
+*.diff  -text
+
+# Binary-ish assets stay binary.
+*.png binary
+*.jpg binary
+*.zip binary
+*.xz  binary
