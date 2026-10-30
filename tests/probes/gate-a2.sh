@@ -85,7 +85,9 @@ ev_block "curl -sk --resolve b.test:443:127.0.0.1 https://b.test/ -D - -o b.body
 	printf '\n'
 } >> "$EVID"
 
-B_STATUS=$(head -n1 "$GATE_DIR/a2-b.hdr" | tr -d '\r')
+# curl writes the status line with a trailing space ("HTTP/2 404 "), so the
+# comparison has to strip trailing whitespace before it can ever match.
+B_STATUS=$(head -n1 "$GATE_DIR/a2-b.hdr" | tr -d '\r' | sed -E 's/[[:space:]]+$//')
 if [ "$B_STATUS" = "HTTP/2 404" ]; then
 	ev_assert "b.test status line" PASS "$B_STATUS"
 elif [ "$B_STATUS" = "HTTP/1.1 404" ]; then
@@ -94,10 +96,14 @@ else
 	ev_assert "b.test status line" FAIL "got '$B_STATUS', want 'HTTP/2 404'"
 fi
 
-if grep -qi '^content-type:' "$GATE_DIR/a2-b.hdr"; then
-	ev_assert "b.test response has content-type" PASS "content-type present, quoted in full above"
+# `respond 404` answers with no body, hence no content-type. Asserting
+# content-type on B was wrong by construction: what matters for isolation is
+# that the response carries no site payload, which the body check below
+# establishes. The bodyless assertion is the correct proxy for that.
+if grep -qi '^content-length: 0' "$GATE_DIR/a2-b.hdr"; then
+	ev_assert "b.test response is bodyless" PASS "content-length: 0, no site payload"
 else
-	ev_assert "b.test response has content-type" FAIL "no content-type header in the B response"
+	ev_assert "b.test response is bodyless" FAIL "expected content-length: 0 on the 404 response"
 fi
 
 if grep -q 'SITE-MARKER-v4' "$GATE_DIR/a2-b.body"; then
@@ -118,7 +124,7 @@ ev_block "curl -sk --resolve a.test:443:127.0.0.1 https://a.test/ -D - -o a.body
 	printf '\n'
 } >> "$EVID"
 
-A_STATUS=$(head -n1 "$GATE_DIR/a2-a.hdr" | tr -d '\r')
+A_STATUS=$(head -n1 "$GATE_DIR/a2-a.hdr" | tr -d '\r' | sed -E 's/[[:space:]]+$//')
 if [ "$A_STATUS" = "HTTP/2 200" ] || [ "$A_STATUS" = "HTTP/1.1 200" ]; then
 	ev_assert "a.test status line" PASS "$A_STATUS"
 else
@@ -144,20 +150,29 @@ openssl s_client -connect 127.0.0.1:443 -servername b.test -showcerts </dev/null
 c3=$?
 ev_block "openssl s_client -connect 127.0.0.1:443 -servername b.test -showcerts | openssl x509 -noout -subject -issuer" "$c3" "$GATE_DIR/a2-b-cert.log"
 
-if grep -q 'CN = b.test' "$GATE_DIR/a2-b-cert.log"; then
-	ev_assert "B cert subject" PASS "CN = b.test"
+# Caddy's internal CA leaves the subject distinguished name empty and carries the
+# hostname only in the SAN extension, so `-subject` prints "subject=" and says
+# nothing about which name the certificate was issued for. The observed CI output
+# was exactly `subject=` with issuer `CN = Caddy Local Authority - ECC
+# Intermediate`. Identity therefore has to be read from the SAN, not the subject.
+openssl s_client -connect 127.0.0.1:443 -servername b.test -showcerts </dev/null 2>/dev/null \
+	| openssl x509 -noout -text > "$GATE_DIR/a2-b-certtext.log" 2>&1
+ev_block "openssl x509 -noout -text (B cert SAN)" 0 "$GATE_DIR/a2-b-certtext.log"
+
+if grep -qE 'DNS:b\.test' "$GATE_DIR/a2-b-certtext.log"; then
+	ev_assert "B cert covers b.test (SAN)" PASS "DNS:b.test present in the SAN extension"
 else
-	ev_assert "B cert subject" FAIL "subject does not contain CN = b.test"
+	ev_assert "B cert covers b.test (SAN)" FAIL "no DNS:b.test entry in the certificate SAN"
 fi
 if grep -q 'Caddy Local Authority' "$GATE_DIR/a2-b-cert.log"; then
 	ev_assert "B cert issuer" PASS "issuer is the local CA"
 else
 	ev_assert "B cert issuer" FAIL "issuer does not contain Caddy Local Authority"
 fi
-if grep -q 'CN = a.test' "$GATE_DIR/a2-b-cert.log"; then
-	ev_assert "B cert is not A's" FAIL "subject/issuer mentions CN = a.test"
+if grep -qE 'DNS:a\.test' "$GATE_DIR/a2-b-certtext.log"; then
+	ev_assert "B cert is not A's" FAIL "the certificate served for b.test carries DNS:a.test"
 else
-	ev_assert "B cert is not A's" PASS "no CN = a.test in subject or issuer"
+	ev_assert "B cert is not A's" PASS "no DNS:a.test in the b.test certificate"
 fi
 
 if [ "$ASSERT_FAIL" -eq 0 ]; then
