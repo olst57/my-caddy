@@ -1,0 +1,329 @@
+name: gate0
+
+# Sprint 1 (Gate 0) of my-caddy v4. Spec: my-caddy-v4-SPEC.md section 7.4.
+# Covers SP1-A1(a)(b)(c), SP1-A2 and SP1-A3(a)(b)(c)(d).
+#
+# Scope boundary (spec 7.3): this workflow produces probe evidence only. It does
+# not build dist/ artifacts, does not emit a delivery Caddyfile, does not touch
+# naive auth, H3, unknown SNI or long-lived connections. Those belong to later
+# sprints. tests/probes/* are one-off probes and must never be imported by the
+# delivery Caddyfile.
+#
+# Action pins are 40-character commit SHAs, copied from caddyserver/caddy's own
+# workflows under _evidence/caddy-v2.11.7/.github/workflows/ so the values come
+# from evidence rather than guesswork. setup-go is v6.5.0, not v5: a 40-hex pin
+# was required and v6.5.0 is the SHA present in that evidence tree.
+# One documented exception: the two actions/download-artifact uses in `stitch`
+# are pinned by tag, not by SHA. See the comment on that job for the reason.
+#
+# Dependency pins (forwardproxy, caddy-l4, xcaddy, xray) are resolved to concrete
+# values by the `pins` job and echoed into the log, so every run records exactly
+# what it built. Upstream branch names appear only inside `pins`, as the thing
+# being resolved to a commit; they never reach a build argument.
+#
+# Evidence layout: spec 7.5 wants one SP1-A1.txt covering (a)(b)(c), but spec 7.4
+# wants the (c) reverse control in its own job. Each job writes SP1-A1.txt in its
+# own workspace, and the canonical SP1-A1.txt is the concatenation of the sp1-a1
+# and sp1-a1c artifacts in that order (each half is banner-labelled).
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  CADDY_TAG: v2.11.7
+  CADDY_COMMIT: 72dd0fb067f6d7826c7f79907670ba4a713bfe37
+  GATE_DIR: ${{ github.workspace }}/.gate
+  GO_VERSION: 1.26.x
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Resolve the moving inputs to 40-hex SHAs / concrete tags once, so every
+  # downstream build argument is a fixed value.
+  # ---------------------------------------------------------------------------
+  pins:
+    runs-on: ubuntu-latest
+    outputs:
+      fwdproxy_sha: ${{ steps.p.outputs.fwdproxy_sha }}
+      l4_sha: ${{ steps.p.outputs.l4_sha }}
+      xcaddy_version: ${{ steps.p.outputs.xcaddy_version }}
+      xray_version: ${{ steps.p.outputs.xray_version }}
+    steps:
+      - name: Resolve pins
+        id: p
+        run: |
+          set -euo pipefail
+          # Branch names are the input to resolve here, and only here.
+          FWDPROXY_SHA=$(git ls-remote https://github.com/klzgrad/forwardproxy refs/heads/naive | awk '{print $1}')
+          L4_SHA=$(git ls-remote https://github.com/mholt/caddy-l4 refs/heads/master | awk '{print $1}')
+          XCADDY_VERSION=$(git ls-remote --tags --refs https://github.com/caddyserver/xcaddy \
+            | awk '{print $2}' | sed 's#refs/tags/##' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+          XRAY_VERSION=$(git ls-remote --tags --refs https://github.com/XTLS/Xray-core \
+            | awk '{print $2}' | sed 's#refs/tags/##' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+
+          for v in FWDPROXY_SHA L4_SHA; do
+            eval "val=\$$v"
+            if ! printf '%s' "$val" | grep -qE '^[0-9a-f]{40}$'; then
+              echo "FATAL: $v did not resolve to a 40-hex commit (got '$val')" >&2
+              exit 1
+            fi
+          done
+          for v in XCADDY_VERSION XRAY_VERSION; do
+            eval "val=\$$v"
+            if [ -z "$val" ]; then
+              echo "FATAL: $v resolved to nothing" >&2
+              exit 1
+            fi
+          done
+
+          echo "forwardproxy (klzgrad/forwardproxy naive) = $FWDPROXY_SHA"
+          echo "caddy-l4    (mholt/caddy-l4 master)        = $L4_SHA"
+          echo "xcaddy                                     = $XCADDY_VERSION"
+          echo "xray                                       = $XRAY_VERSION"
+
+          {
+            echo "fwdproxy_sha=$FWDPROXY_SHA"
+            echo "l4_sha=$L4_SHA"
+            echo "xcaddy_version=$XCADDY_VERSION"
+            echo "xray_version=$XRAY_VERSION"
+          } >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
+  # SP1-A1(a) patch separability + SP1-A1(b) positive build and module list
+  # ---------------------------------------------------------------------------
+  a1:
+    needs: pins
+    runs-on: ubuntu-latest
+    env:
+      FWDPROXY_SHA: ${{ needs.pins.outputs.fwdproxy_sha }}
+      L4_SHA: ${{ needs.pins.outputs.l4_sha }}
+      XCADDY_VERSION: ${{ needs.pins.outputs.xcaddy_version }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Tool versions
+        run: |
+          go version
+          git --version
+      - name: SP1-A1(a)(b)
+        run: bash tests/probes/gate-a1.sh "$GITHUB_WORKSPACE"
+      - name: Show evidence
+        if: always()
+        run: cat evidence/SP1-A1.txt || true
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: sp1-a1
+          path: |
+            evidence/SP1-A1.txt
+            .gate/*.log
+          if-no-files-found: warn
+
+  # ---------------------------------------------------------------------------
+  # SP1-A1(c) reverse control: the build must FAIL, and the failure must name
+  # IdleTimeoutsFromContext. A green build here is a FAIL of the item, not a pass.
+  # ---------------------------------------------------------------------------
+  a1c:
+    needs: pins
+    runs-on: ubuntu-latest
+    env:
+      FWDPROXY_SHA: ${{ needs.pins.outputs.fwdproxy_sha }}
+      L4_SHA: ${{ needs.pins.outputs.l4_sha }}
+      XCADDY_VERSION: ${{ needs.pins.outputs.xcaddy_version }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: SP1-A1(c) reverse control
+        run: bash tests/probes/gate-a1c.sh "$GITHUB_WORKSPACE"
+      - name: Show evidence
+        if: always()
+        run: cat evidence/SP1-A1.txt || true
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: sp1-a1c
+          path: |
+            evidence/SP1-A1.txt
+            .gate/a1c-*.log
+          if-no-files-found: warn
+
+  # ---------------------------------------------------------------------------
+  # SP1-A2: B is explicitly isolated (tls internal, no layer4, so B falls back)
+  # ---------------------------------------------------------------------------
+  a2:
+    needs: pins
+    runs-on: ubuntu-latest
+    env:
+      FWDPROXY_SHA: ${{ needs.pins.outputs.fwdproxy_sha }}
+      L4_SHA: ${{ needs.pins.outputs.l4_sha }}
+      XCADDY_VERSION: ${{ needs.pins.outputs.xcaddy_version }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Install probe tooling
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            socat openssl curl jq
+      - name: Build probe binary
+        run: |
+          go install "github.com/caddyserver/xcaddy/cmd/xcaddy@${XCADDY_VERSION}"
+          export PATH="$PATH:$(go env GOPATH)/bin"
+          bash tests/probes/gate-build.sh "$GITHUB_WORKSPACE"
+          "$GATE_DIR/caddy" version | tee "$GATE_DIR/a1-version.log"
+      - name: SP1-A2
+        run: bash tests/probes/gate-a2.sh "$GITHUB_WORKSPACE"
+      - name: Show evidence
+        if: always()
+        run: |
+          cat evidence/SP1-A2.txt || true
+          echo '--- caddy log tail ---'
+          tail -n 40 .gate/a2-caddy.log || true
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: sp1-a2
+          path: |
+            evidence/SP1-A2.txt
+            .gate/a2-*.log
+            .gate/a2-*.hdr
+            .gate/a2-*.body
+          if-no-files-found: warn
+
+  # ---------------------------------------------------------------------------
+  # SP1-A3: PROXY protocol must be paired
+  #   (a) l4 really sends the header (byte level)
+  #   (b) xray only -> accept rejects
+  #   (c) both ends paired -> accept phase clean
+  #   (d) l4 sends but xray does not require -> rejected
+  # ---------------------------------------------------------------------------
+  a3:
+    needs: pins
+    runs-on: ubuntu-latest
+    env:
+      FWDPROXY_SHA: ${{ needs.pins.outputs.fwdproxy_sha }}
+      L4_SHA: ${{ needs.pins.outputs.l4_sha }}
+      XCADDY_VERSION: ${{ needs.pins.outputs.xcaddy_version }}
+      XRAY_VERSION: ${{ needs.pins.outputs.xray_version }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Install probe tooling
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            socat openssl curl jq unzip
+      - name: Build probe binary
+        run: |
+          go install "github.com/caddyserver/xcaddy/cmd/xcaddy@${XCADDY_VERSION}"
+          export PATH="$PATH:$(go env GOPATH)/bin"
+          bash tests/probes/gate-build.sh "$GITHUB_WORKSPACE"
+          "$GATE_DIR/caddy" version | tee "$GATE_DIR/a1-version.log"
+      - name: SP1-A3
+        run: bash tests/probes/gate-a3.sh "$GITHUB_WORKSPACE"
+      - name: Show evidence
+        if: always()
+        run: |
+          cat evidence/SP1-A3.txt || true
+          echo '--- xray paired log tail ---'
+          tail -n 40 .gate/xray-a3b.log || true
+          echo '--- xray noproxy log tail ---'
+          tail -n 40 .gate/xray-a3d.log || true
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: sp1-a3
+          path: |
+            evidence/SP1-A3.txt
+            .gate/a3*.log
+            .gate/l4-bytes.log
+            .gate/xray-a3*.log
+            .gate/before.txt
+            .gate/after.txt
+          if-no-files-found: warn
+
+  # ---------------------------------------------------------------------------
+  # Spec 7.5 wants ONE SP1-A1.txt covering (a)(b)(c); spec 7.4 wants (c) in its
+  # own job. Each job writes its own half, and this job concatenates them in
+  # (a)(b) then (c) order into the canonical file.
+  #
+  # download-artifact is pinned by tag (v4), not by the 40-hex SHA every other
+  # action here uses. Reason: a resolved SHA cannot be substituted into `uses`,
+  # because GitHub Actions does not allow expressions in the `uses` key -- so a
+  # `download_artifact_sha` output from `pins` would be unwireable dead code, and
+  # a hardcoded SHA would have to be invented offline, which is worse than an
+  # honest tag. Follow-up: pin this to a 40-hex SHA in sprint 2 and record it in
+  # docs/BUILD.md alongside the other action pins.
+  # ---------------------------------------------------------------------------
+  stitch:
+    needs: [a1, a1c]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/download-artifact@v4 # tag pin, see job comment above
+        with:
+          name: sp1-a1
+          path: .gate/art-a1
+      - uses: actions/download-artifact@v4 # tag pin, see job comment above
+        with:
+          name: sp1-a1c
+          path: .gate/art-a1c
+      - name: Concatenate in (a)(b) then (c) order
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          {
+            echo '===== SECTION (a)(b) -- job a1 ====='
+            cat .gate/art-a1/evidence/SP1-A1.txt
+            echo ''
+            echo '===== SECTION (c) -- job a1c ====='
+            cat .gate/art-a1c/evidence/SP1-A1.txt
+          } > evidence/SP1-A1.txt
+          wc -l evidence/SP1-A1.txt
+          grep -c '\[判定\]' evidence/SP1-A1.txt
+      - name: Upload canonical evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sp1-a1-canonical
+          path: evidence/SP1-A1.txt
+
+  # ---------------------------------------------------------------------------
+  # Gate verdict. Spec 7.2: any FAIL stops the programme; sprint 2 must not start.
+  # ---------------------------------------------------------------------------
+  gate-summary:
+    needs: [a1, a1c, a2, a3]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verdict
+        run: |
+          set -euo pipefail
+          A1="${{ needs.a1.result }}"
+          A1C="${{ needs.a1c.result }}"
+          A2="${{ needs.a2.result }}"
+          A3="${{ needs.a3.result }}"
+          printf 'SP1-A1(a)(b) : %s\n' "$A1"
+          printf 'SP1-A1(c)    : %s\n' "$A1C"
+          printf 'SP1-A2       : %s\n' "$A2"
+          printf 'SP1-A3(a-d)  : %s\n' "$A3"
+          if [ "$A1" = success ] && [ "$A1C" = success ] && [ "$A2" = success ] && [ "$A3" = success ]; then
+            echo "GATE 0: PASS -- sprint 2 may start"
+            exit 0
+          fi
+          echo "GATE 0: FAIL -- stop here; do not start sprint 2. See the evidence artifacts."
+          exit 1

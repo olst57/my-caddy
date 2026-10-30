@@ -1,0 +1,25 @@
+{
+	log {
+		level DEBUG
+	}
+	servers :443 {
+		listener_wrappers {
+			layer4 {
+				matching_timeout 3s
+				@reality tls sni b.test
+				route @reality {
+					proxy {
+						proxy_protocol v2
+						upstream 127.0.0.1:19098
+					}
+				}
+			}
+			tls
+		}
+	}
+}
+
+b.test {
+	tls internal
+	respond 404
+}

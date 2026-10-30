@@ -1,0 +1,16 @@
+{
+	auto_https disable_redirects
+	log {
+		level DEBUG
+	}
+}
+
+:443, a.test {
+	tls internal
+	respond "SITE-MARKER-v4" 200
+}
+
+b.test {
+	tls internal
+	respond 404
+}
