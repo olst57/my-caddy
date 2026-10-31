@@ -1,0 +1,82 @@
+# Delivery Caddyfile skeleton for my-caddy v0.2.0.
+#
+# PLACEHOLDER POSTURE. This file is NOT runnable as shipped: it carries
+# placeholder credentials and uses Caddy's internal CA. See
+# deploy/PLACEHOLDERS.md for every token that must be replaced, and
+# docs/XRAY.md for the xray side that must agree with it.
+#
+# Shape follows the structural precedent of tests/probes/gate-layer4.Caddyfile.
+# The probe files are CI probes and are deliberately NOT imported or copied
+# here; the delivery config is its own file.
+{
+	# The layer4 wrapper MUST be listed BEFORE tls. layer4 reads the raw
+	# ClientHello and routes on SNI before any decryption happens; if tls ran
+	# first, the ClientHello would already be consumed by the TLS stack and
+	# REALITY passthrough could not work. The order is semantic, not cosmetic.
+	servers :443 {
+		listener_wrappers {
+			layer4 {
+				matching_timeout 3s
+				# Route only the SNI this tunnel owns. Any other SNI falls
+				# through to the tls wrapper below and is terminated locally.
+				@reality tls sni b.test
+				route @reality {
+					proxy {
+						# PROXY v2 is paired with
+						# streamSettings.sockopt.acceptProxyProtocol in
+						# deploy/xray/config.json. One side alone yields a
+						# tunnel that validates and then breaks at runtime.
+						proxy_protocol v2
+						# Fixed loopback upstream; must equal the xray
+						# inbound listen port (19098).
+						upstream 127.0.0.1:19098
+					}
+				}
+			}
+			tls
+		}
+	}
+}
+
+# Naive coexistence site.
+#
+# The address starts with :443 so forwardproxy's acl/ports defaults -- including
+# the default private-network deny -- stay in force. Do NOT add an `upstream`
+# sub-directive to forward_proxy here: setting a forwardproxy upstream silently
+# disables acl and ports, which removes that deny.
+#
+# `tls internal` is a placeholder posture, not a production one. Caddy's
+# internal CA leaves the subject DN empty, so the hostname appears only in the
+# certificate SAN. Any certificate assertion must read the SAN, never the
+# subject.
+:443, a.test {
+	tls internal
+
+	# Site-level basic_auth, so an authentication handler exists for this site.
+	# The hash below is a bcrypt hash of the published throwaway string recorded
+	# in deploy/PLACEHOLDERS.md. It is non-functional and must be replaced
+	# before any deployment.
+	basic_auth {
+		<NAIVE_USER> $2b$12$HovstiFSZpV1.wMvbNTcUODyIgwkbx.SgiNEmYASiATqcnBRIZddS
+	}
+
+	forward_proxy {
+		# forwardproxy authenticates the CONNECT itself, from
+		# Proxy-Authorization. Its credentials are a separate list from the
+		# site-level basic_auth above, and are encoded as base64(user:pass)
+		# rather than bcrypt.
+		basic_auth <NAIVE_USER> <NAIVE_PASSWORD>
+		# Recommended, not required. Gives the naive endpoint a decoy
+		# behaviour for unauthenticated probes.
+		probe_resistance example.com
+		hide_ip
+		hide_via
+	}
+}
+
+# B is isolated in its own site block and answers 404. It is the local
+# termination path for any SNI the layer4 route does not claim.
+b.test {
+	tls internal
+	respond 404
+}

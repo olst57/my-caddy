@@ -1,0 +1,149 @@
+transcript — my-caddy v0.2.0
+
+Every record below was produced by executing the command on the host named
+in the section heading. The format is:
+
+  [run] exit=<status>
+  $ <command>
+  <output, if any>
+
+Hosts:
+  HOST A  Windows/MSYS authoring host — cannot execute the Linux ELF, so it
+          fail-closes at preflight and never reaches an S3 item.
+  HOST B  ubuntu-latest inside a GitHub Codespace — the result of record.
+          The artifact is from the build workflow run 41069346485 and its
+          exec bit is set with chmod +x, because transfer loses it.
+
+No CI job runs scripts/verify.sh. The HOST B records are a manual run.
+
+
+=== HOST A — Windows/MSYS authoring host (MINGW64_NT-10.0-26200) ===
+
+[run] exit=0
+$ uname -s -m
+MINGW64_NT-10.0-26200 x86_64
+[run] exit=0
+$ jq --version
+jq-1.8.2
+[run] exit=0
+$ git rev-parse HEAD
+0a3b22af3c4a467c12dd99eac50ebad7f6174530
+[run] exit=0
+$ cat dist/pins.txt
+caddy_tag=v2.11.7
+caddy_source_head=72dd0fb067f6d7826c7f79907670ba4a713bfe37
+forwardproxy_sha=e747854e78743dba85c039b38ed185fb11d93667
+caddy_l4_sha=f607ccea1b7dbe61cfcec089f2005621c61f7e6c
+xcaddy_version=v0.4.7
+patch=caddy-read-idle-timeout.patch
+[run] exit=0
+$ cat dist/SHA256SUMS
+1a9115339c7a0edefd692d74324bd4906508c40b11bb781e841d5910337b2624  caddy-linux-amd64
+fab699553659411d0c28cc7d95faf07561f6f74dd334f0920da70962768310de  caddy-linux-arm64
+[run] exit=0
+$ ( cd dist && sha256sum -c SHA256SUMS )
+caddy-linux-amd64: OK
+caddy-linux-arm64: OK
+[run] exit=0
+$ find patches -maxdepth 1 -name '*.patch' -type f | wc -l
+1
+[run] exit=0
+$ bash -n scripts/verify.sh
+[run] exit=0
+$ jq -e . deploy/xray/config.json >/dev/null && echo PASS
+PASS
+[run] exit=0
+$ jq -e '([.inbounds[] | select(.streamSettings.security=="reality")] | length==1) and (.inbounds[0].streamSettings.realitySettings.privateKey=="<REALITY_PRIVATE_KEY>") and (.inbounds[0].streamSettings.realitySettings.shortIds|length==1) and (.inbounds[0].streamSettings.realitySettings.shortIds[0]=="<REALITY_SHORT_ID>")' deploy/xray/config.json >/dev/null && echo PASS
+PASS
+[run] exit=0
+$ git ls-files --error-unmatch .env >/dev/null 2>&1 || echo "not tracked"
+not tracked
+[run] exit=0
+$ git grep -nE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' -- . || echo "no UUID-shaped string"
+no UUID-shaped string
+[run] exit=0
+$ git grep -hoE '[A-Za-z0-9._-]+\.(test|com|net|io|org)' -- deploy/ ':!deploy/PLACEHOLDERS.md' | sort -u
+a.test
+b.test
+example.com
+[run] exit=0
+$ git grep -hoE '<[A-Z_]+>' -- deploy/ ':!deploy/PLACEHOLDERS.md' | sort -u
+<NAIVE_PASSWORD>
+<NAIVE_USER>
+<REALITY_PRIVATE_KEY>
+<REALITY_SHORT_ID>
+<VLESS_UUID>
+[run] exit=0
+$ git grep -hoE '<[A-Z_]+>' -- deploy/PLACEHOLDERS.md | sort -u
+<NAIVE_PASSWORD>
+<NAIVE_USER>
+<REALITY_PRIVATE_KEY>
+<REALITY_SHORT_ID>
+<VLESS_UUID>
+[run] exit=0
+$ test -x dist/caddy-linux-amd64 && echo "test -x: TRUE" || echo "test -x: FALSE"
+test -x: FALSE
+[run] exit=126
+$ ./dist/caddy-linux-amd64 version
+bash: line 1: ./dist/caddy-linux-amd64: cannot execute binary file: Exec format error
+[run] exit=2
+$ bash scripts/verify.sh
+VERIFY: FAIL
+FATAL: CADDY_BIN is not executable: dist/caddy-linux-amd64
+[run] exit=2
+$ CADDY_BIN=dist/caddy-linux-amd64 bash scripts/verify.sh
+VERIFY: FAIL
+FATAL: CADDY_BIN is not executable: dist/caddy-linux-amd64
+[run] exit=2
+$ CADDY_BIN=/nonexistent/caddy bash scripts/verify.sh
+VERIFY: FAIL
+FATAL: CADDY_BIN not found: /nonexistent/caddy
+[run] exit=5
+$ jq -e '([.inbounds[] | select(.streamSettings.security=="reality")] | length==1) and (.[0].streamSettings.realitySettings.privateKey=="<REALITY_PRIVATE_KEY>") and (.[0].streamSettings.realitySettings.shortIds|length==1) and (.[0].streamSettings.realitySettings.shortIds[0]=="<REALITY_SHORT_ID>")' deploy/xray/config.json
+jq: error (at deploy/xray/config.json:44): Cannot index object with number (0)
+
+=== HOST B — ubuntu-latest, GitHub Codespace (Linux x86_64) ===
+
+[run] exit=0
+$ uname -s -m
+Linux x86_64
+[run] exit=0
+$ chmod +x dist/caddy-linux-amd64
+[run] exit=0
+$ ./dist/caddy-linux-amd64 version
+v2.11.7 => /home/runner/work/my-caddy/my-caddy/.build/caddy-src@(devel)
+[run] exit=0
+$ file dist/caddy-linux-amd64
+dist/caddy-linux-amd64: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked, Go BuildID=5nupzQ9uK0p20nEMaBUX/sV3rGEusQn8CPxgJBPge/Pp681A4Lbpx5jbAZOsT9/jHsUdw3_eiAS-fZ5Q2kd, BuildID[sha1]=4991cf05cbcb9f8a399983edc67bf7196089f5ba, stripped
+[run] exit=0
+$ dist/caddy-linux-amd64 fmt --overwrite deploy/Caddyfile
+[run] exit=0
+$ dist/caddy-linux-amd64 adapt --config deploy/Caddyfile --adapter caddyfile 2>.gate/release/adapt.err >.gate/release/adapted.json
+[run] exit=0
+$ wc -c < .gate/release/adapt.err
+0
+[run] exit=0
+$ jq -c '.apps.http.servers | to_entries | map({srv:.key,listen:.value.listen,wrappers:[.value.listener_wrappers[]?.wrapper]})' .gate/release/adapted.json
+[{"srv":"srv0","listen":[":443"],"wrappers":["layer4","tls"]}]
+[run] exit=0
+$ bash scripts/verify.sh | tee .gate/release/verify-run.log
+ITEM S3-1 PASS
+ITEM S3-2 PASS
+ITEM S3-3 PASS
+ITEM S3-4 PASS
+ITEM S3-5 PASS
+ITEM S3-6 PASS
+ITEM S3-7 PASS
+ITEM S3-8 PASS
+ITEM S3-9 PASS
+ITEM S3-10 PASS
+ITEM S3-11 PASS
+ITEM S7-1 PASS
+ITEM S7-2 PASS
+ITEM S7-3 PASS
+ITEM S7-4 PASS
+ITEM S7-5 PASS
+ITEM S7-6 PASS
+ITEM S7-7 PASS
+ITEM S7-8 PASS
+VERIFY: PASS
