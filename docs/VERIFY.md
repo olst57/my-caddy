@@ -1,21 +1,39 @@
 # VERIFY — reproducing the offline checks
 
-This document explains how to reproduce every offline check in this slice.
-Every command quoted below was executed; `docs/transcript-v0.2.0.txt` records
-each with its real exit code and the host it ran on. Nothing here binds a
-listener, starts a server, performs a TLS handshake, or sends an HTTP request.
+This document explains how to reproduce every offline check in this slice, and
+records what the runtime tests actually answered.
+
+The offline part binds no listener, starts no server, performs no TLS handshake
+and sends no HTTP request; it needs `caddy adapt`/`validate` and `jq` only.
+Every command quoted there was executed, and `docs/transcript-v0.2.0.txt`
+records each with its real exit code and the host it ran on. The runtime section
+later in this document — "What the runtime actually answers" — is different in
+kind: it comes from a live `caddy run` on `hw-gz` and is **not** reproducible
+from the repository alone. It is evidence for the behaviours v0.2.1 asserts, and
+it is not part of the offline verifier.
 
 ## Where the checks actually ran
 
 Two hosts matter, and they produced different lines. The transcript labels
 every record with its host so a reader can tell which host produced which line.
 
-**The result of record is the Linux run.** `scripts/verify.sh` was run on
-**ubuntu-latest**, inside a **GitHub Codespace** (Ubuntu 24.04.5, `Linux x86_64`),
-against the artifact from the `build` workflow's **run 41069346485** — the
-`caddy-linux-amd64` binary built at commit
+**The v0.2.1 run was repeated on `hw-gz`.** The S3-9 assertion changed in
+v0.2.1, so the whole verifier was re-run against the corrected config: as `root`
+on `hw-gz` (Ubuntu 24.04, `Linux 6.8.0-136-generic x86_64`) against the same
+binary, sha256 `1a9115339c7a0edefd692d74324bd4906508c40b11bb781e841d5910337b2624`.
+It prints 19/19 PASS and `VERIFY: PASS`; the log is
+`.gate/release/verify-run.log`. That run was manual too. Before the config was
+corrected, the same verifier was run on that host against the v0.2.0 config and
+S3-9 FAILed, with every other item PASS: the site's subroute chain read
+`["authentication","forward_proxy"]` and carried no `reverse_proxy`. That is the
+defect ruled in `.gate/release/PM-DECISIONS-3.md` F-1.
+
+**The v0.2.0 result of record was the Linux run.** `scripts/verify.sh` was run
+on **ubuntu-latest**, inside a **GitHub Codespace** (Ubuntu 24.04.5,
+`Linux x86_64`), against the artifact from the `build` workflow's **run
+41069346485** — the `caddy-linux-amd64` binary built at commit
 `0a3b22af3c4a467c12dd99eac50ebad7f6174530`. On that host all 19 items pass and
-the verifier prints `VERIFY: PASS`. That is the verdict for the deliverable.
+the verifier prints `VERIFY: PASS`.
 
 **The Windows authoring host cannot run the S3 items at all.** The artifact is a
 Linux ELF and the authoring host is Windows/MSYS. It fail-closes at preflight —
@@ -29,7 +47,7 @@ exercised.
 verifier; `.github/workflows/build.yml` builds the artifacts and
 `.github/workflows/gate0.yml` runs the Gate 0 probes, and neither runs
 `scripts/verify.sh`. Do not read this document as a claim that CI verified
-anything. The run was manual, in a Codespace.
+anything. Both runs were manual: v0.2.0 in a Codespace, v0.2.1 on `hw-gz`.
 
 Anyone reproducing it locally requires a **Linux host** (a Codespace, a
 container, or any Linux machine) plus the artifact downloaded from the `build`
@@ -119,7 +137,7 @@ be inert there. See D-2 in `.gate/release/DEVIATIONS.md`.
 | SNI matcher | exactly one `sni` object under the layer4 wrapper, value exactly `["b.test"]` |
 | PROXY forwarding | exactly one `proxy` handler, `proxy_protocol` = `v2`, `upstreams[0].dial[0]` matching `^127\.0\.0\.1:[0-9]+$` |
 | B isolated | the `b.test` 404 route is `terminal` and is ordered before the `forward_proxy` route in the same server |
-| naive preconditions | exactly one `forward_proxy` server on `:443`, a `http_basic` authentication provider present, and no `upstream` key on the `forward_proxy` object |
+| naive preconditions | exactly one `forward_proxy` server on `:443`, no `upstream` key on the `forward_proxy` object, and `forward_proxy` ordered **before** `reverse_proxy` in the site's subroute |
 
 The B-isolation row is a deliberate substitution and it must be stated plainly,
 because a reader comparing the spec text to the verifier will otherwise think a
@@ -142,9 +160,43 @@ demonstrated: reordering the routes, clearing `terminal`, changing the status to
 200, or deleting the route all FAIL. See D-1 in
 `.gate/release/DEVIATIONS.md`.
 
-The last clause is a security property, not a style preference: setting a
+The `upstream` clause is a security property, not a style preference: setting a
 forwardproxy `upstream` silently disables `acl` and `ports`, including the
 default private-network deny.
+
+### The handler order is a required pin, and v0.2.0's check pointed the wrong way
+
+Two directives in one site compile into one `subroute` in the adapted JSON, and
+their order there is the order Caddy runs them. `order forward_proxy before
+reverse_proxy` in the global options block is what produces
+
+```text
+handle = [forward_proxy, reverse_proxy]
+```
+
+Measured: **delete that line and `caddy adapt` still exits 0.** The route
+becomes `["reverse_proxy","forward_proxy"]`, the website handler answers first
+and swallows every request, and no CONNECT ever reaches `forward_proxy`. A
+silent misconfiguration with a green validation is worse than a validation
+error, so S3-9 asserts the resulting order in the adapted JSON as well as the
+Caddyfile asserting it. The ordering clause also requires a `reverse_proxy` to
+be present at all: the "website" role has to exist, and in v0.2.0 it did not.
+
+That assertion was shown to be sensitive, not merely present: adapting a `/tmp`
+copy with the `order` line deleted yields `["reverse_proxy","forward_proxy"]`,
+and `verify.sh` against that copy reports `ITEM S3-9 FAIL` (S3-8 still PASS) and
+`VERIFY: FAIL`. An order pin that cannot fail pins nothing.
+
+S3-9 **replaced** a clause in v0.2.1. v0.2.0 required "an `authentication`
+handler with a `http_basic` provider exists". That clause protected neither
+naive property, and it produced the defect it was supposed to catch: the
+site-level `basic_auth` it demanded ran before `forward_proxy` and answered
+`401` with `www-authenticate: Basic realm="restricted"` to every request — a
+plain `GET` and a correctly credentialed `CONNECT` alike. Measured on the v0.2.0
+config, `.gate/release/SP4-D1.txt`. naive authenticates the CONNECT itself,
+through `forward_proxy`'s own `basic_auth` reading `Proxy-Authorization`; that
+is a separate mechanism and it needs no `authentication` handler in the site.
+Do not reintroduce either the clause or the site-level `basic_auth`.
 
 ### C3 — the xray skeleton
 
@@ -225,8 +277,10 @@ because the artifact has no exec bit there:
 $ CADDY_BIN=dist/caddy-linux-amd64 bash scripts/verify.sh  # expect-fail
 ```
 
-On the Linux host the verifier is green. Its recorded output, from ubuntu-latest
-in a GitHub Codespace against the artifact from `build` run 41069346485, is:
+On the Linux host the verifier is green. The recorded output below is from
+ubuntu-latest in a GitHub Codespace against the artifact from `build` run
+41069346485; the v0.2.1 run on `hw-gz` produced the same 19 lines and the same
+final line.
 
 ```bash
 $ bash scripts/verify.sh | tee .gate/release/verify-run.log
@@ -253,8 +307,105 @@ VERIFY: PASS
 ```
 
 This line pipes through `tee` so the log is kept; it is the form recorded in the
-transcript with `exit=0` under the HOST B heading. The log itself is
-`.gate/release/verify-run.log`.
+transcript with `exit=0` under the HOST B heading. `.gate/release/verify-run.log`
+holds the **v0.2.1** run's output, i.e. the same 19 PASS lines and
+`VERIFY: PASS`, produced on `hw-gz` after S3-9 changed.
+
+## What the runtime actually answers
+
+Everything in this section was measured with `caddy run` on `hw-gz`, against
+the delivery config with **only** `<NAIVE_USER>` and `<NAIVE_PASSWORD>` replaced
+by throwaway test values (`diff -u` in the evidence proves nothing else
+changed), and a test backend answering `200` + `X-Site: v4` + `SITE-BODY-v4` on
+`127.0.0.1:8080`. The evidence files are `.gate/release/SP4B-D1.txt`,
+`SP4B-D2.txt` and `SP4B-D5.txt`. Two of v0.2.0's spec sentences guessed the
+wrong observables; the properties they were reaching for are recorded here as
+measured, which is a correction of the text, not a loosening of the check.
+
+### The site role answers
+
+A plain `GET /` to the site returns `HTTP/2 200` with `x-site: v4` and the body
+`SITE-BODY-v4`, and no `www-authenticate` and no `Proxy-Authenticate`. That is
+what the `reverse_proxy` handler is there for, and it is only reachable because
+`forward_proxy` comes first and passes a non-proxy request through.
+
+### A successful naive CONNECT does not say "Connection established"
+
+A CONNECT carrying a valid `Proxy-Authorization` answers
+
+```text
+HTTP/1.1 200 OK
+Alt-Svc: h3=":443"; ma=2592000
+Padding: <random padding>
+Server: Caddy
+Date: ...
+```
+
+`200 OK` with a `Padding:` header and `Alt-Svc`, **not** `200 Connection
+established`. The status string is not the verdict either: the tunnel is
+established when bytes reach the far end. Measured as a relayed inner request —
+a `GET /` sent inside the tunnel came back with the origin's own
+`HTTP/1.0 200 OK` and a full page body (201,691 bytes in `SP4B-D2.txt`; the
+page size varies per run). Do not assert on "Connection established", and do not
+treat `200 OK` alone as proof.
+
+### An acl-denied CONNECT also answers 200 OK, then closes
+
+The default private-network deny does **not** answer `403` or `502`. Measured, a
+credentialed CONNECT to `127.0.0.1:8080` on the unmodified delivery config (no
+`acl` directive) answers `200 OK` with the same `Padding:`/`Alt-Svc` headers and
+then closes the connection: no body, no error, and `openssl s_client` exits `0`
+well before its timeout.
+
+The verdict cannot come from the status line. It comes from four independent
+observables, all measured in `SP4B-D5.txt`:
+
+- the denied CONNECT answers `200 OK` carrying a `Padding:` header — naive's
+  decoy reply, not a tunnel;
+- `captured_bytes=149`: response headers only, no origin payload, so the inner
+  `GET` was never relayed;
+- the backend's request log has zero lines before the probe and zero after it;
+- the positive control described below: on the test-only
+  `acl { allow 127.0.0.1/32 }` copy, the same probe returns `X-Site: v4` and
+  appends `GET /from-control` to that same log.
+
+That negative is only meaningful beside a positive control, and the control was
+run: the same probe, same credentials, on a test-only copy of the config with
+`acl { allow 127.0.0.1/32 }` added, relayed the inner request — `X-Site: v4`,
+`SITE-BODY-v4`, and a new `GET /from-control` line in the backend log. The acl is
+the only difference between the two runs, which is what attributes the deny
+result to the deny.
+
+One measurement hazard, found the hard way: `reverse_proxy` keeps an upstream
+keep-alive connection open, so after any successful site request `ss -tn` shows
+a caddy-owned ESTAB to `127.0.0.1:8080` that is **not** a proxy tunnel and looks
+identical to one. Socket sampling is therefore ambiguous and is not used as
+evidence here. `SP4B-D5.txt` does carry an `ss` table labelled as sampled while
+a second denied CONNECT was held open, but no process is shown holding that
+CONNECT, so that table proves nothing even setting the keep-alive aside. Sample
+sockets on a freshly started caddy, before the site has been requested, or the
+deny check reads a false positive.
+
+### `probe_resistance`: the two variants are identical on the probes tried
+
+Sprint 4 exercised two `probe_resistance` variants — the bare form and a
+`<secret>` form — against the three D6 probes. Both produced identical results
+on all three: `200` + `X-Site`, `0` x `407`, `0` x `Proxy-Authenticate`. That is
+the whole claim, and U1 is closed only to that extent: this is not evidence that
+a secret path resists probing in general, and nothing here says what another
+client or another probe set would see. Measured in `.gate/release/SP4-D6.txt`;
+not re-run in v0.2.1. The delivery config keeps the form it already has.
+
+### `listener_wrappers { tls }` alone cannot start
+
+A global `servers :443 { listener_wrappers { tls } }` block is refused by this
+build: "it is unnecessary to specify the TLS listener wrapper in the first
+position because that is the default". The refusal applies only to a wrapper
+list naming `tls` **alone**. It bit the Sprint 4 test harness, whose overlay
+configs dropped the block; that is a harness note, not a delivery defect. The
+delivery config lists `layer4` and then `tls`, which is valid and loads. Do not
+"simplify" the block to `tls` alone, and do not read the Sprint 4 overlays as
+the delivery shape.
 
 ## What the Windows authoring host cannot do
 

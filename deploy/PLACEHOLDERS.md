@@ -1,4 +1,4 @@
-# Placeholder register for the v0.2.0 delivery skeletons.
+# Placeholder register for the v0.2.1 delivery skeletons.
 #
 # This file is the single source of truth for every token that must be replaced
 # before deployment. Item S7-5 checks it in both directions: every angle-bracket
@@ -23,8 +23,8 @@
 | <VLESS_UUID> | deploy/xray/config.json, clients[0].id | A freshly generated VLESS client UUID. Generate it on the deployment host; never commit a real one. |
 | <REALITY_PRIVATE_KEY> | deploy/xray/config.json, realitySettings.privateKey | The x25519 private key printed by the xray x25519 helper. The matching public key goes in the client, not here. |
 | <REALITY_SHORT_ID> | deploy/xray/config.json, realitySettings.shortIds[0] | A short id generated for this deployment. It must agree with the client configuration. |
-| <NAIVE_USER> | deploy/Caddyfile, basic_auth block and forward_proxy block of the naive site | The naive proxy username. Used in both places because the site-level basic_auth and the forwardproxy CONNECT authentication are separate mechanisms. |
-| <NAIVE_PASSWORD> | deploy/Caddyfile, forward_proxy basic_auth | The naive proxy secret, in clear text. forwardproxy stores base64 of "user:secret" rather than a bcrypt hash, so this position takes the plaintext, unlike the site-level basic_auth hash below. |
+| <NAIVE_USER> | deploy/Caddyfile, forward_proxy block of the naive site | The naive proxy username, for the `Proxy-Authorization` the CONNECT carries. There is no site-level `basic_auth` in v0.2.1, so this token appears in exactly one place. |
+| <NAIVE_PASSWORD> | deploy/Caddyfile, forward_proxy basic_auth | The naive proxy secret, in clear text. forwardproxy stores base64 of "user:secret" rather than a bcrypt hash, so this position takes the plaintext. |
 
 ## Replace-me literals (not angle-bracket tokens)
 
@@ -34,23 +34,24 @@
 | b.test | deploy/Caddyfile site address, layer4 SNI matcher, deploy/xray/config.json serverNames | RFC 6761 reserved test hostname. Replace with the REALITY hostname. The Caddy-side matcher and the xray-side serverNames must stay equal; S3-11 asserts that. |
 | example.com | deploy/Caddyfile probe_resistance, deploy/xray/config.json dest | Documentation domain. Replace with a real, reachable decoy site. |
 | 127.0.0.1:19098 | deploy/Caddyfile layer4 upstream, deploy/xray/config.json inbound port | Fixed loopback address. The port must stay equal on both sides; S3-11 asserts the port equality. |
+| 127.0.0.1:8080 | deploy/Caddyfile reverse_proxy of the naive site | Placeholder website upstream, fixed loopback in the same style as the xray port. Point it at the real backend before deployment. |
 
-## Declared non-functional credential: the naive basic_auth hash
+## Removed in v0.2.1: the site-level `basic_auth` hash
 
-Per the binding ruling on Q3, a format-valid bcrypt hash of a **published
-throwaway string** may be committed, because `caddy validate` must pass on the
-shipped skeleton and a placeholder that cannot be validated is a broken
-deliverable.
+v0.2.0 carried a site-level `basic_auth` in the naive site, with a format-valid
+bcrypt hash of a published throwaway string, so that `caddy validate` would pass
+and an `authentication` handler would exist. Both the block and the hash are
+**gone**, and they must not come back:
 
-- Hash in deploy/Caddyfile: `$2b$12$HovstiFSZpV1.wMvbNTcUODyIgwkbx.SgiNEmYASiATqcnBRIZddS`
-- Plaintext of that hash: `change-me-throwaway`
-- This hash is **non-functional**. It is a bcrypt hash of a string published in
-  this file, so it grants access to nothing. It **must be replaced before any
-  deployment**, together with the <NAIVE_USER> token it is paired with.
+- the block ran before `forward_proxy` and answered `401` with
+  `www-authenticate: Basic realm="restricted"` to every request, so the site
+  served nothing and even a correctly credentialed CONNECT was refused;
+- the only thing that demanded it was a verifier clause that protected no naive
+  property. S3-9 now asserts the handler order instead.
 
-Hard limit: this ruling covers exactly this one throwaway hash. Any real
-credential, or any hash whose plaintext is not written down above, is a
-secrets-hygiene failure, not a placeholder.
+naive authenticates the CONNECT itself, from `Proxy-Authorization`, through
+`forward_proxy`'s own `basic_auth`. That is the only credential position left on
+this site, and it is the two angle-bracket tokens above.
 
 ## Why `tls internal` is here
 

@@ -20,7 +20,7 @@
 # Fail-closed: a missing jq, a non-executable CADDY_BIN, or a missing input file
 # is a hard error with a diagnostic, never a silent skip.
 #
-# NOTE ON DEVIATIONS FROM THE SPEC TEXT (reported, not waived). Four of the
+# NOTE ON DEVIATIONS FROM THE SPEC TEXT (reported, not waived). Three of the
 # spec's jq expressions address JSON paths that do not exist in the pinned
 # module source. Each check below uses the path the modules actually emit, and
 # the deviation is recorded in the transcript and in docs/VERIFY.md:
@@ -30,12 +30,16 @@
 #                json:"upstreams,omitempty"`; modules/l4proxy/upstream.go,
 #                `Dial []string json:"dial,omitempty"`). There is no singular
 #                `upstream` string in the adapted JSON.
-#   S3-9         caddy v2.11.7 registers the provider as `http_basic`
-#                (modules/caddyhttp/caddyauth/caddyfile.go @ v2.11.7,
-#                `ProvidersRaw: caddy.ModuleMap{"http_basic": ...}`), not
-#                `http_basic_auth`.
 #   S7-3         `.[0]` at the document root indexes an object; the reality
 #                inbound is `.inbounds[0]`.
+#
+# v0.2.1 CHANGES ONE ITEM, S3-9. Its v0.2.0 clause required an `authentication`
+# handler with an `http_basic` provider. That clause protected no naive property
+# and it demanded the very defect it was meant to guard against: the site-level
+# basic_auth it required ran before `forward_proxy` and answered 401 to every
+# request, plain GET and authenticated CONNECT alike. S3-9 now asserts the
+# handler ORDER instead, which is the property that keeps naive reachable. The
+# full ruling is .gate/release/PM-DECISIONS-3.md F-2.
 
 set -uo pipefail
 
@@ -255,20 +259,52 @@ else
 fi
 
 # ---------------------------------------------------------------- S3-9
-# One forward_proxy server on :443, basic_auth present, no forward_proxy.upstream.
-# Deviation: the provider key is http_basic, not http_basic_auth.
-if jq -e '([.apps.http.servers[] | select(any(..; .handler? == "forward_proxy"))] | length == 1)
+# One forward_proxy server on :443; no forward_proxy.upstream; and
+# forward_proxy is ordered BEFORE reverse_proxy in the site's subroute.
+#
+# The ordering clause is the v0.2.1 replacement for v0.2.0's "an authentication
+# handler with a http_basic provider exists" clause. It protects two things:
+#
+#   1. naive is reachable at all. `order forward_proxy before reverse_proxy` is
+#      mandatory, and its absence is silent: measured, caddy adapt exits 0 and
+#      emits ["reverse_proxy","forward_proxy"], so the website handler swallows
+#      every request and no CONNECT ever reaches forward_proxy. A silent
+#      misconfiguration is worse than a validation error, so it is pinned here.
+#   2. the site role exists. The same subroute must carry a reverse_proxy: a
+#      delivery config without a website handler serves no site, which is
+#      exactly the v0.2.0 defect (PM-DECISIONS-3 F-1).
+#
+# Both handler directives compile into ONE subroute in the adapted JSON, so the
+# ordered handler names are read from that subroute's route chain. If a future
+# edit changes the shape so no such subroute exists, this fails loudly rather
+# than passing vacuously.
+if jq -e '
+	[ .apps.http.servers[]
+		| .routes[]?
+		| . as $r
+		| select(any(..; .handler? == "forward_proxy"))
+		| ( [ $r | .. | objects | select(.handler? == "subroute")
+			  | .routes[] | .handle[]? | .handler? ]
+			| select(index("forward_proxy") != null) ) ] as $chain
+	| ([.. | objects | select(.handler? == "forward_proxy")] | length == 1)
+	and ([.apps.http.servers[] | select(any(..; .handler? == "forward_proxy"))] | length == 1)
 	and ([.apps.http.servers[] | select(any(..; .handler? == "forward_proxy"))
 		| .listen | index(":443")] | .[0] != null)
 	and ([.. | objects | select(.handler? == "forward_proxy") | has("upstream")] | any | not)
-	and ([.. | objects | select(.handler? == "authentication"
-		and (.providers.http_basic? != null))] | length >= 1)' \
-	"$ADAPTED" >/dev/null 2>&1; then
+	and (($chain | length) == 1)
+	and (($chain[0] | index("reverse_proxy")) != null)
+	and (($chain[0] | index("forward_proxy")) < ($chain[0] | index("reverse_proxy")))
+' "$ADAPTED" >/dev/null 2>&1; then
 	emit S3-9 PASS
 else
 	emit S3-9 FAIL
-	printf '  naive preconditions not met\n' >&2
+	printf '  naive preconditions not met (need one forward_proxy on :443, no\n' >&2
+	printf '  forward_proxy.upstream, and forward_proxy ordered before\n' >&2
+	printf '  reverse_proxy in the site subroute)\n' >&2
 	jq -c '[.. | objects | select(.handler? == "forward_proxy")]' "$ADAPTED" >&2
+	jq -c '[.apps.http.servers[] | .routes[]?
+		| [.. | objects | select(.handler? == "subroute")
+			| .routes[] | .handle[]? | .handler?]]' "$ADAPTED" >&2
 fi
 
 # ---------------------------------------------------------------- S3-10

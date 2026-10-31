@@ -118,7 +118,11 @@ the Caddy-side offline checks, which ran and passed on Linux; see
 - Whether xray accepts these placeholders. It will not; they are placeholders.
 - Any handshake, any PROXY header observed on the wire. That was Gate 0's probe,
   not this slice.
-- That the tunnel works. Nothing in v0.2.0 claims connectivity.
+- That the REALITY tunnel works. No xray process was started anywhere, so
+  nothing here claims connectivity through this inbound. v0.2.1 did measure a
+  working naive CONNECT tunnel on the delivery config — an external target
+  relayed an inner request — but that path never touches xray and is no
+  evidence about this inbound. See `docs/VERIFY.md`.
 
 `deploy/Caddyfile` uses `tls internal`, which is a placeholder posture, not a
 production one. Caddy's internal CA leaves the certificate subject DN empty, so

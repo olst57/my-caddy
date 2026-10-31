@@ -1,4 +1,4 @@
-# Delivery Caddyfile skeleton for my-caddy v0.2.0.
+# Delivery Caddyfile skeleton for my-caddy v0.2.1.
 #
 # PLACEHOLDER POSTURE. This file is NOT runnable as shipped: it carries
 # placeholder credentials and uses Caddy's internal CA. See
@@ -9,6 +9,16 @@
 # The probe files are CI probes and are deliberately NOT imported or copied
 # here; the delivery config is its own file.
 {
+	# Handler order pin. Mandatory, not cosmetic.
+	#
+	# Measured on the built binary: without this line `caddy adapt` still exits
+	# 0, and the adapted route becomes ["reverse_proxy","forward_proxy"]. The
+	# website handler then answers first and swallows every request, so no
+	# CONNECT ever reaches forward_proxy and naive is dead -- silently, with a
+	# green validation. That failure mode is worse than a validation error, so
+	# scripts/verify.sh item S3-9 also asserts the resulting order.
+	order forward_proxy before reverse_proxy
+
 	# The layer4 wrapper MUST be listed BEFORE tls. layer4 reads the raw
 	# ClientHello and routes on SNI before any decryption happens; if tls ran
 	# first, the ClientHello would already be consumed by the TLS stack and
@@ -45,6 +55,14 @@
 # sub-directive to forward_proxy here: setting a forwardproxy upstream silently
 # disables acl and ports, which removes that deny.
 #
+# There is deliberately NO site-level basic_auth. naive authenticates the
+# CONNECT itself through forward_proxy's own basic_auth (Proxy-Authorization),
+# which is a separate mechanism with its own credential list. v0.2.0 carried a
+# site-level basic_auth and that was a defect: it ran before forward_proxy and
+# answered 401 to every request, so the site never served anything and no
+# CONNECT could authenticate. Do not reintroduce it. See
+# .gate/release/PM-DECISIONS-3.md F-1.
+#
 # `tls internal` is a placeholder posture, not a production one. Caddy's
 # internal CA leaves the subject DN empty, so the hostname appears only in the
 # certificate SAN. Any certificate assertion must read the SAN, never the
@@ -52,19 +70,11 @@
 :443, a.test {
 	tls internal
 
-	# Site-level basic_auth, so an authentication handler exists for this site.
-	# The hash below is a bcrypt hash of the published throwaway string recorded
-	# in deploy/PLACEHOLDERS.md. It is non-functional and must be replaced
-	# before any deployment.
-	basic_auth {
-		<NAIVE_USER> $2b$12$HovstiFSZpV1.wMvbNTcUODyIgwkbx.SgiNEmYASiATqcnBRIZddS
-	}
-
 	forward_proxy {
 		# forwardproxy authenticates the CONNECT itself, from
-		# Proxy-Authorization. Its credentials are a separate list from the
-		# site-level basic_auth above, and are encoded as base64(user:pass)
-		# rather than bcrypt.
+		# Proxy-Authorization. Its credentials are encoded as base64(user:pass)
+		# rather than bcrypt, and they are a separate list from any site-level
+		# credential.
 		basic_auth <NAIVE_USER> <NAIVE_PASSWORD>
 		# Recommended, not required. Gives the naive endpoint a decoy
 		# behaviour for unauthenticated probes.
@@ -72,6 +82,15 @@
 		hide_ip
 		hide_via
 	}
+
+	# The website role. PLACEHOLDER UPSTREAM: 127.0.0.1:8080 is a fixed loopback
+	# port chosen in the same style as the xray upstream (127.0.0.1:19098), and
+	# it must be pointed at the real backend before deployment.
+	#
+	# This handler sits AFTER forward_proxy because of the global `order` pin
+	# above. Anything forward_proxy does not consume as a proxy request falls
+	# through to here, which is what makes the site servable next to naive.
+	reverse_proxy 127.0.0.1:8080
 }
 
 # B is isolated in its own site block and answers 404. It is the local

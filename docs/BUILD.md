@@ -125,13 +125,17 @@ evidence, and this document does not claim otherwise.
 ## NOT VERIFIED IN THIS SLICE
 
 This label means "never attempted on any host in this slice", and it is
-deliberately narrower than it used to be. It does **not** cover the Sprint 3
-items that need the binary — those ran and passed on Linux, see the next
-section.
+deliberately narrower than it used to be. One entry that v0.2.0 listed here no
+longer holds: `caddy run`, a listener bind, a TLS handshake and an HTTP request
+**were** performed on `hw-gz` for the v0.2.1 runtime re-run recorded in
+`docs/VERIFY.md` and in `.gate/release/SP4B-D1.txt`, `SP4B-D2.txt` and
+`SP4B-D5.txt`. They are not part of the offline verifier, and they were not run
+on the Windows authoring host. What has still never been attempted:
 
-- `caddy run`, any listener bind, any TLS handshake, any HTTP request.
 - Any xray start.
 - Any arm64 behaviour. `caddy-linux-arm64` is artifact-verified only.
+- Any REALITY session through the layer4 path. The runtime re-run exercised the
+  naive and website paths only.
 
 These were never attempted. They are not achievements, and no later document in
 this slice should be read as claiming them.
@@ -147,10 +151,12 @@ not a verdict on the deliverable.
 
 The S3 items that require the binary **were** executed — on ubuntu-latest, in a
 GitHub Codespace, against the artifact from run 41069346485, after
-`chmod +x`. All 19 items pass there and the verifier prints `VERIFY: PASS`. That
-is the result of record; `docs/VERIFY.md` states it and the transcript records
-it. No CI job runs the verifier, so that run is manual and is not re-executable
-from the repository alone.
+`chmod +x`. All 19 items pass there and the verifier prints `VERIFY: PASS`.
+`docs/VERIFY.md` states it and the transcript records it. For v0.2.1 the whole
+verifier was re-run on `hw-gz` after the S3-9 assertion changed, against the
+same binary by sha256, and again printed 19/19 PASS and `VERIFY: PASS`; that run
+and its log are described in `docs/VERIFY.md`. No CI job runs the verifier, so
+both runs are manual and neither is re-executable from the repository alone.
 
 ## A fact that bites certificate checks
 
