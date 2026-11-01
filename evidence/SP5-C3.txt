@@ -1,0 +1,166 @@
+SP5-C3 — PROXY is a pair: each single-ended configuration is rejected, both-off degrades to the socket address
+
+Spec:      D:\AiWork\Qoder\my-caddy-v4-SPEC.md §11.4 (SP5-C3)
+Host:      hcss-ecs-94ac (hw-gz), Ubuntu 24.04.4 LTS, x86_64, root
+Xray:      26.10.29 (0afec66, go1.27.3 linux/amd64)
+Caddy:     delivery build, sha256 1a9115339c7a0edefd692d74324bd4906508c40b11bb781e841d5910337b2624
+Verdict:   PASS (deviation D-3: group (a) rejection text differs from the quoted string)
+
+What ran: three runs of the same client, changing exactly one configuration
+bit each time. The two diffs at the top are the only differences between the
+variants (one line removed from the Caddyfile, one boolean flipped in the
+server config).
+
+Deviation D-3 (scoring relevant): for group (a) the spec expects the xray log
+to contain `failed to accepted raw connections`. That string exists in the
+binary but is not what this build emits on this path; it emits
+`REALITY: processed invalid connection ...: failed to read client hello`. The
+connection rejection itself is observed (both curl attempts fail, no access-log
+record, no vless request). The literal string is absent, and its absence is
+printed rather than papered over.
+
+Deviation D-4 (not scored, reported): in group (c) the first request after the
+pair restart stalled for 20 s and returned 000; the immediately following
+request returned 200. The same stall was seen twice more during harness bring-up
+(first connection from a freshly started client to a freshly started layer4
+listener), with Caddy logging
+`caddy.listeners.layer4 ... "matching connection" ... "error":"EOF"`. It is an
+intermittent first-connection stall on the layer4 path, not a PROXY-pairing
+effect: group (c) proves the tunnel works, and the failure mode looks nothing
+like (a) or (b). It is reported here for Sprint 6 to chase, and it did not
+change any verdict in this file.
+
+Everything below the rule is the untruncated output of the run named above:
+each `$ ` line is the command that was executed (verbatim, via eval of the
+same string that was printed), followed by its own output and `[exit=N]`.
+grep exits 1 when it matches nothing; where that exit code appears it is the
+"zero matches" result, not an error.
+
+------------------------------------------------------------------------------
+### host: hcss-ecs-94ac  date: 2026-10-31T13:26:50Z
+
+--- ensure the test client is running on 10800 ---
+$ ss -ltnp | grep ':10800'
+LISTEN 0      4096       127.0.0.1:10800      0.0.0.0:*    users:(("xray",pid=71098,fd=4))                        
+[exit=0]
+
+--- the only Caddyfile difference between the two variants ---
+$ diff Caddyfile.pp Caddyfile.nopp
+10d9
+< 						proxy_protocol v2
+[exit=1]
+
+--- the only server-config difference (acceptProxyProtocol) ---
+$ diff <(jq -S '.inbounds[0].streamSettings.sockopt' xray-server-proxy.json) <(jq -S '.inbounds[0].streamSettings.sockopt' xray-server-noproxy.json)
+2c2
+<   "acceptProxyProtocol": true
+---
+>   "acceptProxyProtocol": false
+[exit=1]
+
+================ (a) xray acceptProxyProtocol=true, l4 proxy_protocol absent ================
+caddyfile=Caddyfile.nopp  server=xray-server-proxy.json
+{"acceptProxyProtocol":true}
+$ curl (attempt 1)
+http=000 time=6.791565
+$ curl (attempt 2)
+http=000 time=12.598639
+
+$ grep -n 'failed to accepted raw connections' /tmp/mc/s5/xray-error.log
+[exit=1]
+
+$ grep -c 'failed to accepted raw connections' /tmp/mc/s5/xray-error.log
+0
+[exit=1]
+
+$ grep -c 'accepting PROXY protocol' /tmp/mc/s5/xray-error.log
+1
+[exit=0]
+
+$ grep -o 'from [0-9.]*:' /tmp/mc/s5/xray-access.log | sort -u
+[exit=0]
+
+$ grep -c 'REALITY: processed invalid connection' /tmp/mc/s5/xray-error.log
+10
+[exit=0]
+
+--- raw xray error log, last 6 lines ---
+2026/10/31 21:27:04.830047 [Info] transport/internet/tcp: REALITY: processed invalid connection from 127.0.0.1:52298: failed to read client hello
+2026/10/31 21:27:11.438262 [Info] transport/internet/tcp: REALITY: processed invalid connection from 127.0.0.1:41628: failed to read client hello
+2026/10/31 21:27:11.674279 [Info] transport/internet/tcp: REALITY: processed invalid connection from 127.0.0.1:41642: failed to read client hello
+2026/10/31 21:27:15.185123 [Info] transport/internet/tcp: REALITY: processed invalid connection from 127.0.0.1:41654: failed to read client hello
+2026/10/31 21:27:15.689862 [Info] transport/internet/tcp: REALITY: processed invalid connection from 127.0.0.1:41656: failed to read client hello
+2026/10/31 21:27:17.436855 [Info] transport/internet/tcp: REALITY: processed invalid connection from 127.0.0.1:59540: failed to read client hello
+--- raw xray access log ---
+
+================ (b) l4 proxy_protocol v2, xray acceptProxyProtocol=false ================
+caddyfile=Caddyfile.pp  server=xray-server-noproxy.json
+{"acceptProxyProtocol":false}
+$ curl (attempt 1)
+http=000 time=20.002213
+$ curl (attempt 2)
+http=000 time=14.186029
+
+$ grep -n 'failed to accepted raw connections' /tmp/mc/s5/xray-error.log
+[exit=1]
+
+$ grep -c 'failed to accepted raw connections' /tmp/mc/s5/xray-error.log
+0
+[exit=1]
+
+$ grep -c 'accepting PROXY protocol' /tmp/mc/s5/xray-error.log
+0
+[exit=1]
+
+$ grep -o 'from [0-9.]*:' /tmp/mc/s5/xray-access.log | sort -u
+[exit=0]
+
+$ grep -c 'REALITY: processed invalid connection' /tmp/mc/s5/xray-error.log
+10
+[exit=0]
+
+--- raw xray error log, last 6 lines ---
+2026/10/31 21:27:44.555349 [Info] transport/internet/tcp: REALITY: processed invalid connection from 127.0.0.1:35692: failed to read client hello
+2026/10/31 21:27:44.765215 [Info] transport/internet/tcp: REALITY: processed invalid connection from 127.0.0.1:35706: failed to read client hello
+2026/10/31 21:27:46.297009 [Info] transport/internet/tcp: REALITY: processed invalid connection from 127.0.0.1:51022: failed to read client hello
+2026/10/31 21:27:46.779800 [Info] transport/internet/tcp: REALITY: processed invalid connection from 127.0.0.1:35720: failed to read client hello
+2026/10/31 21:27:54.494894 [Info] transport/internet/tcp: REALITY: processed invalid connection from 127.0.0.1:33234: failed to read client hello
+2026/10/31 21:27:57.695386 [Info] transport/internet/tcp: REALITY: processed invalid connection from 127.0.0.1:33244: failed to read client hello
+--- raw xray access log ---
+
+================ (c) both off ================
+caddyfile=Caddyfile.nopp  server=xray-server-noproxy.json
+{"acceptProxyProtocol":false}
+$ curl (attempt 1)
+http=000 time=20.002739
+$ curl (attempt 2)
+http=200 time=0.868289
+
+$ grep -n 'failed to accepted raw connections' /tmp/mc/s5/xray-error.log
+[exit=1]
+
+$ grep -c 'failed to accepted raw connections' /tmp/mc/s5/xray-error.log
+0
+[exit=1]
+
+$ grep -c 'accepting PROXY protocol' /tmp/mc/s5/xray-error.log
+0
+[exit=1]
+
+$ grep -o 'from [0-9.]*:' /tmp/mc/s5/xray-access.log | sort -u
+from 127.0.0.1:
+[exit=0]
+
+$ grep -c 'REALITY: processed invalid connection' /tmp/mc/s5/xray-error.log
+0
+[exit=1]
+
+--- raw xray error log, last 6 lines ---
+2026/10/31 21:27:59.554882 [Warning] core: Xray 26.10.29 started
+2026/10/31 21:28:25.380435 [Info] [3964809139] proxy/vless/inbound: firstLen = 1186
+2026/10/31 21:28:25.380466 [Info] [3964809139] proxy/vless/inbound: received request for tcp:www.apple.com:443
+2026/10/31 21:28:25.380472 [Info] [3964809139] app/dispatcher: default route for tcp:www.apple.com:443
+2026/10/31 21:28:25.383052 [Info] [3964809139] transport/internet/tcp: dialing TCP to tcp:www.apple.com:443
+2026/10/31 21:28:25.392000 [Info] [3964809139] proxy/freedom: connection opened to tcp:www.apple.com:443, local endpoint <PUBLIC_IP-1>:38214, remote endpoint <PUBLIC_IP-3>:443
+--- raw xray access log ---
+2026/10/31 21:28:25.380510 from 127.0.0.1:49916 accepted tcp:www.apple.com:443

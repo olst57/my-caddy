@@ -51,19 +51,49 @@ CADDYFILE="${CADDYFILE:-deploy/Caddyfile}"
 XRAY_CONFIG="${XRAY_CONFIG:-deploy/xray/config.json}"
 
 FAILED=0
+PASSED=0
+# Self-consistency invariant (SPEC v0.4.0-SP7 A.3 / B.5): the number of unique
+# `emit S*-*` IDs in this file. Kept next to the items it counts on purpose.
+EXPECTED_ITEMS=24
+# The explicit ID set behind that number (SPEC A.3). S3-1..S3-11 and
+# S7-1..S7-8 and S7-12..S7-15 and S7-18 emit; S7-9, S7-10, S7-11, S7-16 and
+# S7-17 are script-external meta entries and deliberately never appear here —
+# S7-11 in particular is the entry that *describes* this list, so emitting it
+# would be circular.
+ITEM_LIST='S3-1 S3-2 S3-3 S3-4 S3-5 S3-6 S3-7 S3-8 S3-9 S3-10 S3-11
+S7-1 S7-2 S7-3 S7-4 S7-5 S7-6 S7-7 S7-8
+S7-12 S7-13 S7-14 S7-15 S7-18'
+EMITTED_IDS=""
 emit() { # $1=ID $2=PASS|FAIL
 	printf 'ITEM %s %s\n' "$1" "$2"
-	[ "$2" = PASS ] || FAILED=1
+	EMITTED_IDS="$EMITTED_IDS$1"$'\n'
+	if [ "$2" = PASS ]; then
+		PASSED=$((PASSED + 1))
+	else
+		FAILED=$((FAILED + 1))
+	fi
+}
+
+# The single FAIL verdict printer. `fatal()` reuses it so that the string
+# "VERIFY: FAIL" is defined once; the PASS= summary line is deliberately NOT
+# reachable from here (a fail-closed exit must never look like a full run).
+verdict_fail() {
+	printf 'VERIFY: FAIL\n'
 }
 
 fatal() {
-	printf 'VERIFY: FAIL\n' >&2
+	verdict_fail >&2
 	printf 'FATAL: %s\n' "$*" >&2
 	exit 2
 }
 
 # ------------------------------------------------------------------- preflight
 # Fail closed before any check runs. Silent skip is forbidden.
+# Part of the invariant: the declared ID list must be exactly EXPECTED_ITEMS
+# long, or the three-way reconciliation has nothing to reconcile against.
+item_list_count="$(printf '%s\n' $ITEM_LIST | wc -l | tr -d '[:space:]')"
+[ "$item_list_count" -eq "$EXPECTED_ITEMS" ] \
+	|| fatal "ITEM_LIST has $item_list_count entries; EXPECTED_ITEMS is $EXPECTED_ITEMS"
 command -v jq >/dev/null 2>&1 || fatal "jq is required and was not found on PATH"
 [ -f "$CADDYFILE" ] || fatal "CADDYFILE not found: $CADDYFILE"
 [ -f "$XRAY_CONFIG" ] || fatal "XRAY_CONFIG not found: $XRAY_CONFIG"
@@ -357,7 +387,7 @@ if git ls-files --error-unmatch .env >/dev/null 2>&1; then
 	emit S7-1 FAIL
 	printf '  .env is tracked\n' >&2
 else
-	bad=$(git ls-files '.env*' | grep -v '^\.env\.example$' || true)
+	bad=$(git ls-files '.env*' | grep -v '^\.env\.example$')
 	if [ -z "$bad" ]; then
 		emit S7-1 PASS
 	else
@@ -368,7 +398,7 @@ fi
 
 # ---------------------------------------------------------------- S7-2
 uuid_hits=$(git grep -nE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' \
-	-- . 2>/dev/null || true)
+	-- . 2>/dev/null)
 if [ -z "$uuid_hits" ]; then
 	emit S7-2 PASS
 else
@@ -396,7 +426,7 @@ fi
 host_set=$(git grep -hoE '[A-Za-z0-9._-]+\.(test|com|net|io|org)' \
 	-- deploy/ ':!deploy/PLACEHOLDERS.md' 2>/dev/null | sort -u)
 if diff <(printf '%s\n' "$host_set") \
-	<(printf 'a.test\nb.test\nexample.com\n' | sort -u) >/dev/null 2>&1; then
+	<(printf '%s\n' a.test b.test example.com | sort -u) >/dev/null 2>&1; then
 	emit S7-4 PASS
 else
 	emit S7-4 FAIL
@@ -474,10 +504,237 @@ else
 	printf '  doc verdicts disagree with recorded exit codes\n' >&2
 fi
 
+# ---------------------------------------------------------------- S7-12
+# G1: no live-looking credential may exist in the tracked tree. The three
+# patterns are the ones published verbatim in SPEC v0.4.0-SP7 B.1. POSIX ERE
+# has no shorthand whitespace class, so `[[:space:]]` is used throughout, and
+# the credential pattern is matched case-insensitively because an all-uppercase
+# assignment would otherwise slip through untouched.
+g1_p1='"privateKey"[[:space:]]*:[[:space:]]*"[^<"]'
+g1_p2='[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+g1_p3='(secret|password|passwd|passphrase)[[:space:]]*[:=][[:space:]]*[^<$[:space:]]'
+
+g1_bad=0
+
+# B.1 also forbids the PCRE whitespace shorthand (backslash followed by s)
+# inside a regex: POSIX ERE defines no such class, so a pattern written with it
+# would silently mean "a literal s, then anything" and pass forever. Any regex
+# containing it is an immediate FAIL. The two-character sequence is assembled
+# here instead of being spelled out, because SPEC B.1 criterion 5 greps this
+# file for exactly that sequence and must come back empty.
+g1_bs="$(printf '\\%s' 's')"
+for g1_p in "$g1_p1" "$g1_p2" "$g1_p3"; do
+	case "$g1_p" in
+	*"$g1_bs"*)
+		g1_bad=1
+		printf '  G1 regex contains the PCRE whitespace shorthand, undefined in POSIX ERE: %s\n' "$g1_p" >&2
+		;;
+	esac
+done
+
+# Positive and negative controls. A tree scan that finds nothing proves nothing
+# by itself: a broken regex produces exactly the same silence. So each pattern
+# is run against a synthetic match (must match) and a synthetic placeholder
+# (must not match), in a scratch directory required to live outside the repo.
+g1_ctl_ok=1
+g1_tmp="$(mktemp -d 2>/dev/null)" || g1_tmp=""
+case "${g1_tmp:-}" in
+'')
+	g1_ctl_ok=0
+	printf '  G1 controls: mktemp -d failed\n' >&2
+	;;
+"$REPO_ROOT"|"$REPO_ROOT"/*)
+	g1_ctl_ok=0
+	printf '  G1 controls: scratch dir is inside the repository: %s\n' "$g1_tmp" >&2
+	;;
+esac
+g1_cleanup() { [ -n "${g1_tmp:-}" ] && rm -rf "$g1_tmp"; }
+trap 'g1_cleanup; rm -f "$ADAPTED" "$ADAPTED_ERR"' EXIT
+
+if [ "$g1_ctl_ok" -eq 1 ]; then
+	# The bodies are assembled at run time on purpose. Spelling a
+	# credential-shaped literal out in this tracked file would make G1 flag its
+	# own verifier — the exact defect class G1 exists to catch.
+	printf '"%s" : "%s"\n' 'privateKey' 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY' \
+		> "$g1_tmp/pc1.json"
+	printf '"%s": "%s"\n' 'privateKey' '<REALITY_PRIVATE_KEY>' > "$g1_tmp/nc1.json"
+	printf 'id=%s-%s-%s-%s-%s\n' 3f2504e0 4f89 11d3 9a0c 0305e82c3301 \
+		> "$g1_tmp/pc2.txt"
+	printf 'id=%s\n' '<VLESS_UUID>' > "$g1_tmp/nc2.txt"
+	g1_key_pre='NAIVE_PASS'
+	g1_key_suf='WORD'
+	printf '%s%s=%s\n' "$g1_key_pre" "$g1_key_suf" 'xyzzy-control-value' > "$g1_tmp/pc3.txt"
+	printf '%s%s=%s\n' "$g1_key_pre" "$g1_key_suf" '<NAIVE_PASSWORD>' > "$g1_tmp/nc3.txt"
+
+	g1_control() { # $1=label $2=regex $3=grep mode (s|i) $4=file $5=wanted exit
+		if [ "$3" = i ]; then
+			grep -qiE "$2" "$4"
+		else
+			grep -qE "$2" "$4"
+		fi
+		g1_rc=$?
+		if [ "$g1_rc" -ne "$5" ]; then
+			g1_bad=1
+			printf '  G1 %s mismatch: regex=%s file=%s expected=exit %s actual=exit %s\n' \
+				"$1" "$2" "${4##*/}" "$5" "$g1_rc" >&2
+			printf '  G1 %s body: %s\n' "${4##*/}" "$(cat "$4")" >&2
+		fi
+	}
+	g1_control p1-positive "$g1_p1" s "$g1_tmp/pc1.json" 0
+	g1_control p1-negative "$g1_p1" s "$g1_tmp/nc1.json" 1
+	g1_control p2-positive "$g1_p2" s "$g1_tmp/pc2.txt" 0
+	g1_control p2-negative "$g1_p2" s "$g1_tmp/nc2.txt" 1
+	g1_control p3-positive "$g1_p3" i "$g1_tmp/pc3.txt" 0
+	g1_control p3-negative "$g1_p3" i "$g1_tmp/nc3.txt" 1
+fi
+
+g1_hits=""
+for g1_p in "$g1_p1" "$g1_p2"; do
+	g1_hits="$g1_hits$(git grep -nE "$g1_p" -- . 2>/dev/null)"
+done
+g1_hits="$g1_hits$(git grep -niE "$g1_p3" -- . 2>/dev/null)"
+if [ "$g1_bad" -eq 0 ] && [ -z "$g1_hits" ]; then
+	emit S7-12 PASS
+else
+	emit S7-12 FAIL
+	if [ -n "$g1_hits" ]; then
+		printf '  credential-shaped material in the tracked tree:\n%s\n' "$g1_hits" >&2
+	fi
+	if [ "$g1_bad" -ne 0 ]; then
+		printf '  G1 regex self-test failed (see the mismatches above)\n' >&2
+	fi
+fi
+
+# ---------------------------------------------------------------- S7-13
+# G2: docs/REDACTION.md is the single source of truth for the redaction
+# allowlist. Exact-token set comparison in both directions, plus the C4
+# negative control and the forbidden hostname.
+s13_ok=1
+if [ ! -f docs/REDACTION.md ]; then
+	s13_ok=0
+	printf '  docs/REDACTION.md is missing\n' >&2
+else
+	s13_allow=$(grep -E '^\[C[123]\] ' docs/REDACTION.md | cut -d' ' -f2 | sort -u)
+	s13_tree=$(git grep -hoE '[A-Za-z0-9][A-Za-z0-9.-]*\.(test|com|net|org|io)(/[A-Za-z0-9._-]+)?' \
+		-- . 2>/dev/null | sort -u)
+	s13_missing=$(comm -23 <(printf '%s\n' "$s13_tree") <(printf '%s\n' "$s13_allow"))
+	if [ -n "$s13_missing" ]; then
+		s13_ok=0
+		printf '  tree tokens absent from the allowlist:\n%s\n' "$s13_missing" >&2
+	fi
+	s13_excess=$(comm -13 <(printf '%s\n' "$s13_tree") <(printf '%s\n' "$s13_allow") \
+		| grep -vxE 'example\.(net|org)')
+	if [ -n "$s13_excess" ]; then
+		s13_ok=0
+		printf '  allowlist entries neither present nor declared absent:\n%s\n' "$s13_excess" >&2
+	fi
+	[ "$(grep -cE '^\[C4\] ' docs/REDACTION.md)" -eq 1 ] || s13_ok=0
+	if [ "$(grep -cxE '^\[C4\] nexample\\\.com$' docs/REDACTION.md)" -ne 1 ]; then
+		s13_ok=0
+	fi
+	if printf '%s\n' "$s13_allow" | grep -qxE 'nexample\.com'; then
+		s13_ok=0
+		printf '  the C4 negative control leaked into the C1-C3 allowlist\n' >&2
+	fi
+	[ "$(printf '%s\n' "$s13_allow" | wc -l)" -eq 15 ] || s13_ok=0
+	if git grep -qE 'ksc[-]test[.]com' -- . 2>/dev/null; then s13_ok=0; fi
+	if grep -qE 'ksc[-]test[.]com' docs/REDACTION.md; then s13_ok=0; fi
+fi
+if [ "$s13_ok" -eq 1 ]; then emit S7-13 PASS; else
+	emit S7-13 FAIL
+	printf '  redaction allowlist is not consistent with the tree\n' >&2
+fi
+
+# ---------------------------------------------------------------- S7-14
+# G3: .env.example carries exactly the five registered placeholders, one
+# strict KEY=<TOKEN> per line, and .env itself is neither tracked nor
+# un-ignored. `.env` existing on disk is NOT a failure: on a deployment host it
+# is supposed to exist, and SPEC v0.4.0-SP7 B.3 only requires it to stay
+# untracked and ignored.
+s14_ok=1
+if [ ! -f .env.example ]; then
+	s14_ok=0
+	printf '  .env.example is missing\n' >&2
+else
+	[ "$(grep -cE '^[A-Z_][A-Z0-9_]*=<[^>]+>$' .env.example)" -eq 5 ] || s14_ok=0
+	[ "$(grep -cE '^[A-Z_][A-Z0-9_]*=<[^>]+>.*#' .env.example)" -eq 0 ] || s14_ok=0
+	if ! diff <(grep -oE '^[A-Z_][A-Z0-9_]*' .env.example | sort -u) \
+		<(git grep -hoE '<[A-Z_]+>' -- deploy/PLACEHOLDERS.md 2>/dev/null \
+			| tr -d '<>' | sort -u) >/dev/null 2>&1; then
+		s14_ok=0
+		printf '  key set differs from deploy/PLACEHOLDERS.md\n' >&2
+	fi
+fi
+if git ls-files --error-unmatch .env >/dev/null 2>&1; then
+	s14_ok=0
+	printf '  .env is tracked\n' >&2
+fi
+if ! git check-ignore -q .env; then
+	s14_ok=0
+	printf '  .env is not git-ignored\n' >&2
+fi
+if [ "$s14_ok" -eq 1 ]; then emit S7-14 PASS; else
+	emit S7-14 FAIL
+fi
+
+# ---------------------------------------------------------------- S7-15
+# G4: the version-provenance paragraph must name the real source (#8121),
+# record the misreference (#8264) as a misreference, carry both timestamps,
+# and keep the tag name and its date on one physical line.
+s15_ok=1
+for s15_need in '8f549e6df151f6a947bc183200c5d26baefa8666' \
+	'f355b8687d5582ea9fcc99f71598109d1e5b6ced' '#8121' '#8264' \
+	'2026-10-03T05:06:18Z' '2026-10-03T12:18:42Z'; do
+	grep -qF "$s15_need" docs/BUILD.md || s15_ok=0
+done
+grep -qE 'v2\.11\.7.*2026-10-03' docs/BUILD.md || s15_ok=0
+if [ -n "$(git grep -nE 'All 19|19 items|19/19' -- docs/ 2>/dev/null)" ]; then
+	s15_ok=0
+	printf '  stale item counts remain in docs/\n' >&2
+fi
+if [ "$s15_ok" -eq 1 ]; then emit S7-15 PASS; else
+	emit S7-15 FAIL
+	printf '  docs/BUILD.md does not carry the G4 provenance facts\n' >&2
+fi
+
+# ---------------------------------------------------------------- S7-18
+# C4: deploy/ is frozen at v0.3.0. Fail closed when the ref is missing —
+# an unverifiable freeze must never read as a pass.
+if git rev-parse --verify --quiet 'v0.3.0^{commit}' >/dev/null 2>&1; then
+	s18_diff="$(git diff --name-only 'v0.3.0' -- deploy/ 2>/dev/null)"
+	if [ -z "$s18_diff" ]; then
+		emit S7-18 PASS
+	else
+		emit S7-18 FAIL
+		printf '  deploy/ changed since v0.3.0:\n%s\n' "$s18_diff" >&2
+	fi
+else
+	emit S7-18 FAIL
+	printf '  v0.3.0 ref missing; deploy freeze unverifiable\n' >&2
+fi
+
 # ------------------------------------------------------------------- verdict
-if [ "$FAILED" -eq 0 ]; then
+# Third leg of the invariant (SPEC A.3 / B.5): the IDs actually emitted, deduped
+# and sorted, must equal the declared ITEM_LIST as a set. A mismatch here is a
+# verifier self-consistency failure, so it goes through verdict_fail() and a
+# nonzero exit — never a bare warning.
+set_ok=1
+if ! diff <(printf '%s' "$EMITTED_IDS" | sort -u) \
+	<(printf '%s\n' $ITEM_LIST | sort -u) >/dev/null 2>&1; then
+	set_ok=0
+	printf '  emitted ID set differs from ITEM_LIST (expected 24 entries):\n' >&2
+	diff <(printf '%s' "$EMITTED_IDS" | sort -u) \
+		<(printf '%s\n' $ITEM_LIST | sort -u) >&2
+fi
+
+# The PASS=/FAIL= summary is emitted only here, after every item has had a
+# chance to run; `fatal()` returns through `verdict_fail()` and can never
+# reach it. `VERIFY: PASS|FAIL` stays the last line of output.
+if [ "$FAILED" -eq 0 ] && [ "$PASSED" -eq "$EXPECTED_ITEMS" ] && [ "$set_ok" -eq 1 ]; then
+	printf 'PASS=%s FAIL=%s\n' "$PASSED" "$FAILED"
 	printf 'VERIFY: PASS\n'
 	exit 0
 fi
-printf 'VERIFY: FAIL\n'
+printf 'PASS=%s FAIL=%s\n' "$PASSED" "$FAILED"
+verdict_fail
 exit 1

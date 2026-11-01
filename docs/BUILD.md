@@ -80,6 +80,44 @@ one appears. The count is recorded in the transcript:
 $ find patches -maxdepth 1 -name '*.patch' -type f | wc -l
 ```
 
+## The patch's upstream source, and one corrected reference
+
+The patch header carries this claim, kept here as the object of the correction:
+
+```text
+Backport Caddy's idle-timeout override API from:
+https://github.com/caddyserver/caddy/commit/f355b8687d5582ea9fcc99f71598109d1e5b6ced
+```
+
+That reference is a **misreference**. `f355b8687d5582ea9fcc99f71598109d1e5b6ced`
+is `reverseproxy: retry dial errors wrapped by a forward proxy (#8264)` — a
+reverse-proxy retry fix. It touches only `retries_test.go` and `reverseproxy.go`,
+and a case-insensitive search for `idletimeout` or `deadlineIdle` over that
+commit returns no hit. It does not carry the API this patch adds.
+
+The real upstream source is `8f549e6df151f6a947bc183200c5d26baefa8666`, whose
+first line is `timeouts: take precedence over server-wide and enclosing idle
+timeouts (#8121)`. It is the squash merge of PR #8121, merged at
+`2026-10-03T12:18:43Z`; its committer date is `2026-10-03T12:18:42Z`; it touches
+five files, including `modules/caddyhttp/idletimeout.go`, and the symbols its
+diff adds are exactly the ones this patch carries.
+
+`8f549e6` is **not** contained in `v2.11.7`, so "Backport" is the correct word for
+the direction of the port. v2.11.7（annotated tag，tagger date 2026-10-03T05:25:14Z；tag 指向 commit 72dd0fb，committer date 2026-10-03T05:06:18Z）
+
+The ordering that establishes that:
+
+- The tag points at commit `72dd0fb067f6d7826c7f79907670ba4a713bfe37`, whose
+  committer date is `2026-10-03T05:06:18Z`.
+- `8f549e6` follows that commit by 7h12m24s, and the upstream compare API reports
+  `"status":"behind"`, `"ahead_by":0`, `"behind_by":2`.
+- `f355b86` follows `8f549e6` by 17d23h30m50s — which is why the wrong SHA looked
+  plausible in the header in the first place.
+
+The mechanical checks for this paragraph are the seven greps in
+`.gate/release/SPEC-v0.4.0-SP7.md` B.4, and `scripts/verify.sh` runs the same
+assertions as item `S7-15`.
+
 ## Which architecture was executed
 
 `caddy-linux-amd64` is the native artifact and is the only one that is ever
@@ -151,12 +189,14 @@ not a verdict on the deliverable.
 
 The S3 items that require the binary **were** executed — on ubuntu-latest, in a
 GitHub Codespace, against the artifact from run 41069346485, after
-`chmod +x`. All 19 items pass there and the verifier prints `VERIFY: PASS`.
-`docs/VERIFY.md` states it and the transcript records it. For v0.2.1 the whole
-verifier was re-run on `hw-gz` after the S3-9 assertion changed, against the
-same binary by sha256, and again printed 19/19 PASS and `VERIFY: PASS`; that run
-and its log are described in `docs/VERIFY.md`. No CI job runs the verifier, so
-both runs are manual and neither is re-executable from the repository alone.
+`chmod +x`. The verifier printed `VERIFY: PASS` there, over the item set that
+existed at that time. `docs/VERIFY.md` states it and the transcript records it.
+For v0.2.1 the whole verifier was re-run on `hw-gz` after the S3-9 assertion
+changed, against the same binary by sha256, and again printed `VERIFY: PASS`;
+that run and its log are described in `docs/VERIFY.md`. The item set has since
+grown: `scripts/verify.sh` now declares `EXPECTED_ITEMS=24`, and
+`docs/VERIFY.md` lists all 24 IDs. No CI job runs the verifier, so both runs are
+manual and neither is re-executable from the repository alone.
 
 ## A fact that bites certificate checks
 

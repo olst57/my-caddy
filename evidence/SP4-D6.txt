@@ -1,0 +1,185 @@
+### date(UTC): 2026-10-31T11:57:21Z
+### host: hcss-ecs-94ac Linux 6.8.0-136-generic x86_64
+### caddy: v2.11.7 => /home/runner/work/my-caddy/my-caddy/.build/caddy-src@(devel)
+### caddy sha256: 1a9115339c7a0edefd692d74324bd4906508c40b11bb781e841d5910337b2624
+### SITE_DOMAIN=a.test WEB_PORT=18080 TARGET_HOST=www.microsoft.com
+### NAIVE_USER=<NAIVE_USER> NAIVE_PASS=<NAIVE_PASSWORD> (throwaway test credentials)
+
+=== the only difference between the two variants ===
+
+$ diff -u /tmp/mc/Caddyfile.b /tmp/mc/Caddyfile.v2
+--- /tmp/mc/Caddyfile.b	2026-10-31 19:46:21.914481577 +0800
++++ /tmp/mc/Caddyfile.v2	2026-10-31 19:51:30.377644675 +0800
+@@ -9,7 +9,7 @@
+ 
+ 	forward_proxy {
+ 		basic_auth <NAIVE_USER> <NAIVE_PASSWORD>
+-		probe_resistance
++		probe_resistance <HOST-2>
+ 		hide_ip
+ 		hide_via
+ 	}
+[exit=1]
+
+==================================================================
+=== variant 1 : /tmp/mc/Caddyfile.b ===
+=== forward_proxy block ===
+	forward_proxy {
+		basic_auth <NAIVE_USER> <NAIVE_PASSWORD>
+		probe_resistance
+		hide_ip
+		hide_via
+	}
+
+caddy run pid=56488 config=/tmp/mc/Caddyfile.b listening on :443 after ~250ms
+
+--- (1) unauthenticated CONNECT ---
+
+$ printf 'CONNECT www.microsoft.com:443 HTTP/1.1\r\nHost: www.microsoft.com:443\r\n\r\n' | timeout 15 openssl s_client -connect 127.0.0.1:443 -servername a.test -quiet -ign_eof 2>/dev/null | head -20
+HTTP/1.1 200 OK
+Alt-Svc: h3=":443"; ma=2592000
+Content-Type: text/plain
+Date: Sat, 31 Oct 2026 11:57:21 GMT
+Server: sp4-backend/1
+Via: 1.1 Caddy
+X-Site: v4
+
+[exit=0]
+
+$ printf 'CONNECT www.microsoft.com:443 HTTP/1.1\r\nHost: www.microsoft.com:443\r\n\r\n' | timeout 10 openssl s_client -connect 127.0.0.1:443 -servername a.test -quiet -ign_eof 2>/dev/null > /tmp/d6-v1-c.out; echo captured
+captured
+[exit=0]
+status line: HTTP/1.1 200 OK
+proxy-authenticate hits: 0
+x-site hits: 1
+
+--- (2) unauthenticated GET ---
+
+$ curl -sk --resolve a.test:443:127.0.0.1 https://a.test/ -D /tmp/d6-v1-get.hdr -o /tmp/d6-v1-get.body
+[exit=0]
+
+$ head -1 /tmp/d6-v1-get.hdr
+HTTP/2 200 
+[exit=0]
+
+$ grep -i -e '^x-site:' -e '^proxy-authenticate:' /tmp/d6-v1-get.hdr || true
+x-site: v4
+[exit=0]
+body: SITE-BODY-v4
+
+--- (3) wrong-credential GET ---
+
+$ curl -sk --resolve a.test:443:127.0.0.1 -u wrong:wrong https://a.test/ -D /tmp/d6-v1-bad.hdr -o /tmp/d6-v1-bad.body
+[exit=0]
+
+$ head -1 /tmp/d6-v1-bad.hdr
+HTTP/2 200 
+[exit=0]
+
+$ grep -i -e '^x-site:' -e '^proxy-authenticate:' /tmp/d6-v1-bad.hdr || true
+x-site: v4
+[exit=0]
+body: SITE-BODY-v4
+caddy stopped; :443 is free
+
+--- caddy log for variant 1, last 8 lines ---
+{"level":"warn","ts":1793447856.9186645,"logger":"http.handlers.reverse_proxy","msg":"aborting with incomplete response","upstream":"127.0.0.1:18080","duration":0.000672841,"request":{"remote_ip":"127.0.0.1","remote_port":"41404","client_ip":"127.0.0.1","proto":"HTTP/1.1","method":"CONNECT","host":"www.microsoft.com:443","uri":"www.microsoft.com:443","headers":{"X-Forwarded-For":["127.0.0.1"],"X-Forwarded-Proto":["https"],"X-Forwarded-Host":["www.microsoft.com:443"],"Via":["1.1 Caddy"],"User-Agent":[""]},"tls":{"resumed":false,"version":772,"cipher_suite":4865,"proto":"","server_name":"a.test","ech":false}},"error":"reading: context canceled"}
+{"level":"warn","ts":1793447866.9227924,"logger":"http.handlers.reverse_proxy","msg":"aborting with incomplete response","upstream":"127.0.0.1:18080","duration":0.000640091,"request":{"remote_ip":"127.0.0.1","remote_port":"42504","client_ip":"127.0.0.1","proto":"HTTP/1.1","method":"CONNECT","host":"www.microsoft.com:443","uri":"www.microsoft.com:443","headers":{"X-Forwarded-Host":["www.microsoft.com:443"],"Via":["1.1 Caddy"],"User-Agent":[""],"X-Forwarded-For":["127.0.0.1"],"X-Forwarded-Proto":["https"]},"tls":{"resumed":false,"version":772,"cipher_suite":4865,"proto":"","server_name":"a.test","ech":false}},"error":"reading: context canceled"}
+{"level":"info","ts":1793447867.0053606,"msg":"shutting down apps, then terminating","signal":"SIGTERM"}
+{"level":"warn","ts":1793447867.005389,"msg":"exiting; byeee!! 👋","signal":"SIGTERM"}
+{"level":"info","ts":1793447867.0054185,"logger":"http","msg":"servers shutting down with eternal grace period"}
+{"level":"info","ts":1793447867.0056295,"logger":"tls.cache.maintenance","msg":"stopped background certificate maintenance","cache":"0xcadfe7e3600"}
+{"level":"info","ts":1793447867.005692,"logger":"admin","msg":"stopped previous server","address":"localhost:2019"}
+{"level":"info","ts":1793447867.0057006,"msg":"shutdown complete","signal":"SIGTERM","exit_code":0}
+
+==================================================================
+=== variant 2 : /tmp/mc/Caddyfile.v2 ===
+=== forward_proxy block ===
+	forward_proxy {
+		basic_auth <NAIVE_USER> <NAIVE_PASSWORD>
+		probe_resistance <HOST-2>
+		hide_ip
+		hide_via
+	}
+
+caddy run pid=56542 config=/tmp/mc/Caddyfile.v2 listening on :443 after ~250ms
+
+--- (1) unauthenticated CONNECT ---
+
+$ printf 'CONNECT www.microsoft.com:443 HTTP/1.1\r\nHost: www.microsoft.com:443\r\n\r\n' | timeout 15 openssl s_client -connect 127.0.0.1:443 -servername a.test -quiet -ign_eof 2>/dev/null | head -20
+HTTP/1.1 200 OK
+Alt-Svc: h3=":443"; ma=2592000
+Content-Type: text/plain
+Date: Sat, 31 Oct 2026 11:57:47 GMT
+Server: sp4-backend/1
+Via: 1.1 Caddy
+X-Site: v4
+
+[exit=0]
+
+$ printf 'CONNECT www.microsoft.com:443 HTTP/1.1\r\nHost: www.microsoft.com:443\r\n\r\n' | timeout 10 openssl s_client -connect 127.0.0.1:443 -servername a.test -quiet -ign_eof 2>/dev/null > /tmp/d6-v2-c.out; echo captured
+captured
+[exit=0]
+status line: HTTP/1.1 200 OK
+proxy-authenticate hits: 0
+x-site hits: 1
+
+--- (2) unauthenticated GET ---
+
+$ curl -sk --resolve a.test:443:127.0.0.1 https://a.test/ -D /tmp/d6-v2-get.hdr -o /tmp/d6-v2-get.body
+[exit=0]
+
+$ head -1 /tmp/d6-v2-get.hdr
+HTTP/2 200 
+[exit=0]
+
+$ grep -i -e '^x-site:' -e '^proxy-authenticate:' /tmp/d6-v2-get.hdr || true
+x-site: v4
+[exit=0]
+body: SITE-BODY-v4
+
+--- (3) wrong-credential GET ---
+
+$ curl -sk --resolve a.test:443:127.0.0.1 -u wrong:wrong https://a.test/ -D /tmp/d6-v2-bad.hdr -o /tmp/d6-v2-bad.body
+[exit=0]
+
+$ head -1 /tmp/d6-v2-bad.hdr
+HTTP/2 200 
+[exit=0]
+
+$ grep -i -e '^x-site:' -e '^proxy-authenticate:' /tmp/d6-v2-bad.hdr || true
+x-site: v4
+[exit=0]
+body: SITE-BODY-v4
+caddy stopped; :443 is free
+
+--- caddy log for variant 2, last 8 lines ---
+{"level":"warn","ts":1793447882.5302505,"logger":"http.handlers.reverse_proxy","msg":"aborting with incomplete response","upstream":"127.0.0.1:18080","duration":0.000684291,"request":{"remote_ip":"127.0.0.1","remote_port":"60620","client_ip":"127.0.0.1","proto":"HTTP/1.1","method":"CONNECT","host":"www.microsoft.com:443","uri":"www.microsoft.com:443","headers":{"X-Forwarded-Proto":["https"],"X-Forwarded-Host":["www.microsoft.com:443"],"Via":["1.1 Caddy"],"User-Agent":[""],"X-Forwarded-For":["127.0.0.1"]},"tls":{"resumed":false,"version":772,"cipher_suite":4865,"proto":"","server_name":"a.test","ech":false}},"error":"reading: context canceled"}
+{"level":"warn","ts":1793447892.5344152,"logger":"http.handlers.reverse_proxy","msg":"aborting with incomplete response","upstream":"127.0.0.1:18080","duration":0.000633351,"request":{"remote_ip":"127.0.0.1","remote_port":"54914","client_ip":"127.0.0.1","proto":"HTTP/1.1","method":"CONNECT","host":"www.microsoft.com:443","uri":"www.microsoft.com:443","headers":{"User-Agent":[""],"X-Forwarded-For":["127.0.0.1"],"X-Forwarded-Proto":["https"],"X-Forwarded-Host":["www.microsoft.com:443"],"Via":["1.1 Caddy"]},"tls":{"resumed":false,"version":772,"cipher_suite":4865,"proto":"","server_name":"a.test","ech":false}},"error":"reading: context canceled"}
+{"level":"info","ts":1793447892.6145883,"msg":"shutting down apps, then terminating","signal":"SIGTERM"}
+{"level":"warn","ts":1793447892.6146138,"msg":"exiting; byeee!! 👋","signal":"SIGTERM"}
+{"level":"info","ts":1793447892.6146455,"logger":"http","msg":"servers shutting down with eternal grace period"}
+{"level":"info","ts":1793447892.6147904,"logger":"tls.cache.maintenance","msg":"stopped background certificate maintenance","cache":"0x226bc0752900"}
+{"level":"info","ts":1793447892.614832,"logger":"admin","msg":"stopped previous server","address":"localhost:2019"}
+{"level":"info","ts":1793447892.6148372,"msg":"shutdown complete","signal":"SIGTERM","exit_code":0}
+
+==================================================================
+=== observation matrix (recorded values, not expectations) ===
+observation                  | variant 1 (bare)                   | variant 2 (secret domain)         
+unauthenticated CONNECT      | HTTP/1.1 200 OK xsite=1 pa=0      | HTTP/1.1 200 OK xsite=1 pa=0     
+unauthenticated GET          | HTTP/2 200  xsite=1 pa=0          | HTTP/2 200  xsite=1 pa=0         
+wrong-credential GET         | HTTP/2 200  xsite=1 pa=0          | HTTP/2 200  xsite=1 pa=0         
+
+--- any 407 anywhere in the six captures? ---
+
+$ grep -c " 407 " /tmp/d6-v1-c.out /tmp/d6-v2-c.out /tmp/d6-v1-get.hdr /tmp/d6-v2-get.hdr /tmp/d6-v1-bad.hdr /tmp/d6-v2-bad.hdr || true
+/tmp/d6-v1-c.out:0
+/tmp/d6-v2-c.out:0
+/tmp/d6-v1-get.hdr:0
+/tmp/d6-v2-get.hdr:0
+/tmp/d6-v1-bad.hdr:0
+/tmp/d6-v2-bad.hdr:0
+[exit=0]
+
+--- final listener state ---
+no :443 / :80 listener

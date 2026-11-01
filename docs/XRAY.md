@@ -165,7 +165,7 @@ Xray 26.10.29 (Xray, Penetrates Everything.) 0afec66 (go1.27.3 linux/amd64)
 The binary's sha256 on the host is
 `e783b9d2b46ed1ab3617c59b04dfbce38c999322d018c6e060f18d88bf6158aa`; it came from
 `Xray-linux-64.zip`, tag `v26.10.29`, downloaded on the authoring host and copied
-up (the server cannot reliably reach github.com). `26.10.29` is a calendar
+up (the server cannot reliably reach `github.com/XTLS/Xray-core`). `26.10.29` is a calendar
 version, so it satisfies the `>= v1.8.0` requirement by the spec's own rule and
 is not string-compared to `v1.8.0`.
 
@@ -256,7 +256,7 @@ Caddy does appear in it.
    source address (the host's own `172.31.2.95`) instead of a loopback alias.
 2. **Choose the dest by the certificate you see through the tunnel.** On this
    host `www.apple.com:443` answers its own certificate when probed directly,
-   but through REALITY the handshake presented `CN = tzcdn.ksc-test.com`
+   but through REALITY the handshake presented `CN = <HOST-1>`
    (issuer Sectigo) — a cert that does not correspond to the dest. The item
    that asserts "the cert is the dest's" therefore failed for apple and passed
    for `www.microsoft.com:443`, whose direct and tunneled certificates are

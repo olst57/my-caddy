@@ -1,0 +1,53 @@
+SP5-C6 — xray listens on loopback only
+
+Spec:      D:\AiWork\Qoder\my-caddy-v4-SPEC.md §11.4 (SP5-C6)
+Host:      hcss-ecs-94ac (hw-gz), Ubuntu 24.04.4 LTS, x86_64, root
+Xray:      26.10.29 (0afec66, go1.27.3 linux/amd64)
+Caddy:     delivery build, sha256 1a9115339c7a0edefd692d74324bd4906508c40b11bb781e841d5910337b2624
+Verdict:   PASS
+
+What ran: the pair restarted with the shipped pairing, then `ss -ltnp`
+filtered to xray's port. The full `ss -ltn` follows so the absence of a
+wildcard bind on 19098 can be checked against the complete listener table
+rather than against a filtered view.
+
+One extra regex that was run during the session, `ss -ltnp | grep -c
+':19098.*0.0.0.0:'`, returns 1 because it matches the *peer* address column of
+the 127.0.0.1 row. It says nothing about the listening address and is recorded
+here only so it is not mistaken for a MISSING hit; the authoritative check is
+the `0\.0\.0\.0:19098|\*:19098` count, which is 0.
+
+Everything below the rule is the untruncated output of the run named above:
+each `$ ` line is the command that was executed (verbatim, via eval of the
+same string that was printed), followed by its own output and `[exit=N]`.
+grep exits 1 when it matches nothing; where that exit code appears it is the
+"zero matches" result, not an error.
+
+------------------------------------------------------------------------------
+================ SP5-C6 xray listens on loopback only ================
+    caddyfile=Caddyfile.pp xraycfg=xray-server-proxy.json
+    LISTEN 0      4096       127.0.0.1:19098      0.0.0.0:*    users:(("xray",pid=71482,fd=4))                        
+    LISTEN 0      4096               *:443              *:*    users:(("caddy",pid=71483,fd=4))                       
+$ ss -ltnp | grep ':19098'
+LISTEN 0      4096       127.0.0.1:19098      0.0.0.0:*    users:(("xray",pid=71482,fd=4))                        
+[exit=0]
+
+$ ss -ltn | grep -E ':19098' | grep -cE '0\.0\.0\.0:19098|\*:19098' || true
+0
+[exit=0]
+
+$ ss -ltn
+State  Recv-Q Send-Q Local Address:Port  Peer Address:PortProcess
+LISTEN 0      4096   <PUBLIC_IP-5>%lo:53         0.0.0.0:*          
+LISTEN 0      70         127.0.0.1:33060      0.0.0.0:*          
+LISTEN 0      4096         0.0.0.0:22         0.0.0.0:*          
+LISTEN 0      50         127.0.0.1:3306       0.0.0.0:*          
+LISTEN 0      4096      <PUBLIC_IP-6>:53         0.0.0.0:*          
+LISTEN 0      4096       127.0.0.1:19098      0.0.0.0:*          
+LISTEN 0      10         127.0.0.1:29338      0.0.0.0:*          
+LISTEN 0      10         127.0.0.1:29339      0.0.0.0:*          
+LISTEN 0      4096       127.0.0.1:10800      0.0.0.0:*          
+LISTEN 0      4096               *:80               *:*          
+LISTEN 0      4096            [::]:22            [::]:*          
+LISTEN 0      4096               *:443              *:*          
+[exit=0]

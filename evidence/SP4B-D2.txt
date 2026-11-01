@@ -1,0 +1,77 @@
+### date(UTC): 2026-10-31T12:19:32Z
+### host: hcss-ecs-94ac Linux 6.8.0-136-generic x86_64
+### caddy: v2.11.7 => /home/runner/work/my-caddy/my-caddy/.build/caddy-src@(devel)
+### caddy sha256: 1a9115339c7a0edefd692d74324bd4906508c40b11bb781e841d5910337b2624
+### item: SP4B-D2
+### config under test: /tmp/mc/probe/Caddyfile.run
+###   = deploy/Caddyfile with ONLY the two credential placeholders replaced
+###   (diff below). The delivery shape is otherwise untouched.
+### NAIVE_USER=<NAIVE_USER> NAIVE_PASSWORD=<NAIVE_PASSWORD> (throwaway test credentials)
+### backend: python3 backend.py on 127.0.0.1:8080, every method answers
+###   200 + X-Site: v4 + body SITE-BODY-v4, and appends one line to
+###   backend.log per request received. That log is a D5 observable.
+
+--- D2: credentialed CONNECT to an external target ---
+
+$ getent ahosts www.microsoft.com | head -3
+<PUBLIC_IP-2>    STREAM <HOST-1>
+<PUBLIC_IP-2>    DGRAM  
+<PUBLIC_IP-2>    RAW    
+[exit=0]
+
+$ printf 'CONNECT www.microsoft.com:443 HTTP/1.1\r\nHost: www.microsoft.com:443\r\nProxy-Authorization: Basic <NAIVE_BASIC_AUTH>\r\n\r\n' | timeout 15 openssl s_client -connect 127.0.0.1:443 -servername a.test -quiet -ign_eof 2>/dev/null > /tmp/mc/probe/d2.443.out; echo openssl_exit=$?; echo captured_bytes=$(wc -c < /tmp/mc/probe/d2.443.out)
+openssl_exit=124
+captured_bytes=164
+[exit=0]
+
+$ cat -A /tmp/mc/probe/d2.443.out | head -8
+HTTP/1.1 200 OK^M$
+Alt-Svc: h3=":443"; ma=2592000^M$
+Padding: {#!>!>+}{>^`![{#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^M$
+Server: Caddy^M$
+Date: Sat, 31 Oct 2026 12:19:32 GMT^M$
+^M$
+[exit=0]
+
+--- D2 relay proof: CONNECT to port 80, then a plaintext request
+--- INSIDE the tunnel. A second status line can only come from the far end. ---
+
+$ printf 'CONNECT www.microsoft.com:80 HTTP/1.1\r\nHost: www.microsoft.com:80\r\nProxy-Authorization: Basic <NAIVE_BASIC_AUTH>\r\n\r\nGET / HTTP/1.0\r\nHost: www.microsoft.com\r\n\r\n' | timeout 20 openssl s_client -connect 127.0.0.1:443 -servername a.test -quiet -ign_eof 2>/dev/null > /tmp/mc/probe/d2.relay.out; echo openssl_exit=$?; echo captured_bytes=$(wc -c < /tmp/mc/probe/d2.relay.out)
+openssl_exit=0
+captured_bytes=201691
+[exit=0]
+
+$ grep -a -o 'HTTP/1\.[01] [0-9][0-9][0-9][^[:cntrl:]]*' /tmp/mc/probe/d2.relay.out | head -5
+HTTP/1.1 200 OK
+HTTP/1.0 200 OK
+[exit=0]
+
+$ grep -a -c -i microsoft /tmp/mc/probe/d2.relay.out
+183
+[exit=0]
+
+--- D2 judgement inputs ---
+
+$ head -1 /tmp/mc/probe/d2.443.out
+HTTP/1.1 200 OK
+[exit=0]
+
+$ grep -a -ci 'Padding:' /tmp/mc/probe/d2.443.out
+1
+[exit=0]
+
+$ grep -a -ci 'Alt-Svc:' /tmp/mc/probe/d2.443.out
+1
+[exit=0]
+
+$ grep -a -ci 'Connection established' /tmp/mc/probe/d2.443.out || true
+0
+[exit=0]
+
+### caddy stopped; :443 released. The test backend is left running.
+
+--- final listener state, recorded after caddy was stopped ---
+
+$ ss -ltn | grep -E ":8080|:443 " || echo "no listener on :443"
+LISTEN 0      5          127.0.0.1:8080       0.0.0.0:*          
+[exit=0]

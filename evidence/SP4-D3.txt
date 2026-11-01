@@ -1,0 +1,108 @@
+### date(UTC): 2026-10-31T11:47:55Z
+### host: hcss-ecs-94ac Linux 6.8.0-136-generic x86_64
+### caddy: v2.11.7 => /home/runner/work/my-caddy/my-caddy/.build/caddy-src@(devel)
+### caddy sha256: 1a9115339c7a0edefd692d74324bd4906508c40b11bb781e841d5910337b2624
+### SITE_DOMAIN=a.test WEB_PORT=18080 TARGET_HOST=www.microsoft.com
+### NAIVE_USER=<NAIVE_USER> NAIVE_PASS=<NAIVE_PASSWORD> (throwaway test credentials)
+
+=== preamble: handler order with and without the global order line ===
+(D3 can only fall through to the site handler if forward_proxy runs first)
+
+--- Caddyfile.b-nolink : global block ---
+{
+	order forward_proxy before reverse_proxy
+}
+
+# Same as Caddyfile.b with the global order line removed. Adapt-only control
+# for the handler-order observation in SP4-D1.
+:443, a.test {
+	tls internal
+
+	forward_proxy {
+		basic_auth <NAIVE_USER> <NAIVE_PASSWORD>
+		probe_resistance
+--- Caddyfile.b-nolink : adapt exit + handler order ---
+adapt exit=0
+[{"hosts":[],"handlers":["forward_proxy","reverse_proxy"]}]
+
+--- Caddyfile.b : global block ---
+{
+	order forward_proxy before reverse_proxy
+}
+
+# Sprint 4 overlay B: delivery shape MINUS the site-level basic_auth block.
+# Same listener_wrappers deviation as overlay A (see Caddyfile.a).
+:443, a.test {
+	tls internal
+
+	forward_proxy {
+		basic_auth <NAIVE_USER> <NAIVE_PASSWORD>
+		probe_resistance
+--- Caddyfile.b : adapt exit + handler order ---
+adapt exit=0
+[{"hosts":[],"handlers":["forward_proxy","reverse_proxy"]}]
+
+=== overlay B, site-level basic_auth <NAIVE_USER> <NAIVE_PASSWORD>
+caddy run pid=54365 config=/tmp/mc/Caddyfile.b listening on :443 after ~250ms
+
+--- SP4-D3 command (verbatim shape from spec 10.4), unauthenticated CONNECT ---
+
+$ printf 'CONNECT www.microsoft.com:443 HTTP/1.1\r\nHost: www.microsoft.com:443\r\n\r\n' | timeout 15 openssl s_client -connect 127.0.0.1:443 -servername a.test -quiet -ign_eof 2>/dev/null | head -20
+HTTP/1.1 200 OK
+Alt-Svc: h3=":443"; ma=2592000
+Content-Type: text/plain
+Date: Sat, 31 Oct 2026 11:47:56 GMT
+Server: sp4-backend/1
+Via: 1.1 Caddy
+X-Site: v4
+
+[exit=0]
+
+--- same, captured to file for header assertions ---
+
+$ printf 'CONNECT www.microsoft.com:443 HTTP/1.1\r\nHost: www.microsoft.com:443\r\n\r\n' | timeout 10 openssl s_client -connect 127.0.0.1:443 -servername a.test -quiet -ign_eof 2>/dev/null > /tmp/d3.out; echo "bytes=$(wc -c < /tmp/d3.out)"
+bytes=165
+[exit=0]
+
+$ cat -A /tmp/d3.out | head -12
+HTTP/1.1 200 OK^M$
+Alt-Svc: h3=":443"; ma=2592000^M$
+Content-Type: text/plain^M$
+Date: Sat, 31 Oct 2026 11:48:11 GMT^M$
+Server: sp4-backend/1^M$
+Via: 1.1 Caddy^M$
+X-Site: v4^M$
+^M$
+[exit=0]
+
+--- judgement inputs ---
+
+$ grep -ci "proxy-authenticate" /tmp/d3.out || true
+0
+[exit=0]
+
+$ grep -ci "x-site: v4" /tmp/d3.out || true
+1
+[exit=0]
+
+$ head -1 /tmp/d3.out
+HTTP/1.1 200 OK
+[exit=0]
+caddy stopped; :443 is free
+
+--- caddy log, last 12 lines (look for forward_proxy / reverse_proxy errors) ---
+{"level":"info","ts":1793447275.9786742,"logger":"tls","msg":"finished cleaning storage units"}
+{"level":"info","ts":1793447275.98558,"logger":"pki.ca.local","msg":"root certificate is already trusted by system","path":"storage:pki/authorities/local/root.crt"}
+{"level":"info","ts":1793447275.985691,"msg":"autosaved config (load with --resume flag)","file":"/root/.config/caddy/autosave.json"}
+{"level":"info","ts":1793447275.985697,"msg":"serving initial configuration"}
+{"level":"warn","ts":1793447291.2081602,"logger":"http.handlers.reverse_proxy","msg":"aborting with incomplete response","upstream":"127.0.0.1:18080","duration":0.000637471,"request":{"remote_ip":"127.0.0.1","remote_port":"44570","client_ip":"127.0.0.1","proto":"HTTP/1.1","method":"CONNECT","host":"www.microsoft.com:443","uri":"www.microsoft.com:443","headers":{"User-Agent":[""],"X-Forwarded-For":["127.0.0.1"],"X-Forwarded-Proto":["https"],"X-Forwarded-Host":["www.microsoft.com:443"],"Via":["1.1 Caddy"]},"tls":{"resumed":false,"version":772,"cipher_suite":4865,"proto":"","server_name":"a.test","ech":false}},"error":"reading: context canceled"}
+{"level":"warn","ts":1793447301.2126212,"logger":"http.handlers.reverse_proxy","msg":"aborting with incomplete response","upstream":"127.0.0.1:18080","duration":0.000572811,"request":{"remote_ip":"127.0.0.1","remote_port":"36158","client_ip":"127.0.0.1","proto":"HTTP/1.1","method":"CONNECT","host":"www.microsoft.com:443","uri":"www.microsoft.com:443","headers":{"User-Agent":[""],"X-Forwarded-For":["127.0.0.1"],"X-Forwarded-Proto":["https"],"X-Forwarded-Host":["www.microsoft.com:443"],"Via":["1.1 Caddy"]},"tls":{"resumed":false,"version":772,"cipher_suite":4865,"proto":"","server_name":"a.test","ech":false}},"error":"reading: context canceled"}
+{"level":"info","ts":1793447301.2245283,"msg":"shutting down apps, then terminating","signal":"SIGTERM"}
+{"level":"warn","ts":1793447301.224548,"msg":"exiting; byeee!! 👋","signal":"SIGTERM"}
+{"level":"info","ts":1793447301.2245748,"logger":"http","msg":"servers shutting down with eternal grace period"}
+{"level":"info","ts":1793447301.224756,"logger":"tls.cache.maintenance","msg":"stopped background certificate maintenance","cache":"0x2b180ab3d880"}
+{"level":"info","ts":1793447301.224802,"logger":"admin","msg":"stopped previous server","address":"localhost:2019"}
+{"level":"info","ts":1793447301.2248075,"msg":"shutdown complete","signal":"SIGTERM","exit_code":0}
+
+--- final listener state ---
+no :443 listener

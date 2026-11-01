@@ -1,0 +1,205 @@
+### date(UTC): 2026-10-31T11:52:11Z
+### host: hcss-ecs-94ac Linux 6.8.0-136-generic x86_64
+### caddy: v2.11.7 => /home/runner/work/my-caddy/my-caddy/.build/caddy-src@(devel)
+### caddy sha256: 1a9115339c7a0edefd692d74324bd4906508c40b11bb781e841d5910337b2624
+### SITE_DOMAIN=a.test WEB_PORT=18080 TARGET_HOST=www.microsoft.com
+### NAIVE_USER=<NAIVE_USER> NAIVE_PASS=<NAIVE_PASSWORD> (throwaway test credentials)
+
+=== overlay B: no acl override, default private-network deny in force ===
+--- /tmp/mc/Caddyfile.b (grep acl: must be empty) ---
+
+$ grep -n 'acl' /tmp/mc/Caddyfile.b || echo 'no acl directive present'
+no acl directive present
+[exit=0]
+
+caddy run pid=55231 config=/tmp/mc/Caddyfile.b listening on :443 after ~250ms
+
+--- backend request log before the probe ---
+7
+
+--- SP4-D5 command (verbatim shape from spec 10.4) ---
+
+$ printf 'CONNECT 127.0.0.1:18080 HTTP/1.1\r\nHost: 127.0.0.1:18080\r\nProxy-Authorization: Basic <NAIVE_BASIC_AUTH>\r\n\r\n' | timeout 15 openssl s_client -connect 127.0.0.1:443 -servername a.test -quiet -ign_eof 2>/dev/null | head -20
+HTTP/1.1 200 OK
+Alt-Svc: h3=":443"; ma=2592000
+Padding: !`+>(#]!?]@^][)>~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Server: Caddy
+Date: Sat, 31 Oct 2026 11:52:12 GMT
+
+[exit=0]
+
+--- same, captured for assertions ---
+
+$ printf 'CONNECT 127.0.0.1:18080 HTTP/1.1\r\nHost: 127.0.0.1:18080\r\nProxy-Authorization: Basic <NAIVE_BASIC_AUTH>\r\n\r\n' | timeout 10 openssl s_client -connect 127.0.0.1:443 -servername a.test -quiet -ign_eof 2>/dev/null > /tmp/d5.out; echo "bytes=$(wc -c < /tmp/d5.out)"
+bytes=158
+[exit=0]
+
+$ cat -A /tmp/d5.out | head -12
+HTTP/1.1 200 OK^M$
+Alt-Svc: h3=":443"; ma=2592000^M$
+Padding: +![(#$`?]`[#}$+^~~~~~~~~~~~~~~~~~~~~~~~~~~~~^M$
+Server: Caddy^M$
+Date: Sat, 31 Oct 2026 11:52:12 GMT^M$
+^M$
+[exit=0]
+
+--- judgement inputs, part 1 ---
+
+$ head -1 /tmp/d5.out
+HTTP/1.1 200 OK
+[exit=0]
+
+$ grep -ci "x-site" /tmp/d5.out || true
+0
+[exit=0]
+
+$ grep -ci "SITE-BODY-v4" /tmp/d5.out || true
+0
+[exit=0]
+
+--- backend request log after part 1 (unchanged = proxy never spoke to it) ---
+
+$ wc -l < /tmp/mc/backend.log
+7
+[exit=0]
+
+$ tail -3 /tmp/mc/backend.log
+127.0.0.1 - "GET / HTTP/1.1" 200 -
+127.0.0.1 - "CONNECT www.microsoft.com:443 HTTP/1.1" 200 -
+127.0.0.1 - "CONNECT www.microsoft.com:443 HTTP/1.1" 200 -
+[exit=0]
+
+=== part 2: decisive probe. CONNECT, then an HTTP request INSIDE the tunnel ===
+(if the tunnel is real the backend must log /d5-inside and answer X-Site: v4)
+--- kernel state 2 s into the tunnel attempt ---
+
+$ ss -tnp | grep -E ":(443|18080)\b"
+[exit=1]
+--- tunnel output, raw ---
+
+$ cat -A /tmp/d5-inside.out | head -20
+depth=2 CN = Caddy Local Authority - 2026 ECC Root$
+verify return:1$
+depth=1 CN = Caddy Local Authority - ECC Intermediate$
+verify return:1$
+depth=0 $
+verify return:1$
+HTTP/1.1 200 OK^M$
+Alt-Svc: h3=":443"; ma=2592000^M$
+Padding: $`$!}>?>)(`${()^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^M$
+Server: Caddy^M$
+Date: Sat, 31 Oct 2026 11:52:12 GMT^M$
+^M$
+[exit=0]
+--- tunnel output assertions ---
+
+$ grep -ci "x-site: v4" /tmp/d5-inside.out || true
+0
+[exit=0]
+
+$ grep -ci "SITE-BODY-v4" /tmp/d5-inside.out || true
+0
+[exit=0]
+
+$ grep -ci "d5-inside" /tmp/mc/backend.log || true
+0
+[exit=0]
+--- backend log delta since part 1: 0 line(s) ---
+
+$ tail -3 /tmp/mc/backend.log
+127.0.0.1 - "GET / HTTP/1.1" 200 -
+127.0.0.1 - "CONNECT www.microsoft.com:443 HTTP/1.1" 200 -
+127.0.0.1 - "CONNECT www.microsoft.com:443 HTTP/1.1" 200 -
+[exit=0]
+caddy stopped; :443 is free
+
+=== part 3: positive control on the TEST-ONLY acl overlay (overlay jin ce shi) ===
+--- /tmp/mc/Caddyfile.acl-testonly ---
+{
+	order forward_proxy before reverse_proxy
+}
+
+# TEST-ONLY overlay (overlay jin ce shi): same as overlay B plus an explicit
+# acl that allows 127.0.0.1/32, so a CONNECT to the loopback backend can
+# establish a tunnel. This file must never enter the delivery config.
+:443, a.test {
+	tls internal
+
+	forward_proxy {
+		basic_auth <NAIVE_USER> <NAIVE_PASSWORD>
+		probe_resistance
+		hide_ip
+		hide_via
+		acl {
+			allow 127.0.0.1/32
+		}
+	}
+
+	reverse_proxy 127.0.0.1:18080
+}
+
+caddy run pid=55307 config=/tmp/mc/Caddyfile.acl-testonly listening on :443 after ~250ms
+
+--- kernel state 2 s into the positive-control tunnel ---
+
+$ ss -tnp | grep -E ":(443|18080)\b"
+[exit=1]
+--- tunnel output, raw ---
+
+$ cat -A /tmp/d5-acl.out | head -20
+depth=2 CN = Caddy Local Authority - 2026 ECC Root$
+verify return:1$
+depth=1 CN = Caddy Local Authority - ECC Intermediate$
+verify return:1$
+depth=0 $
+verify return:1$
+HTTP/1.1 200 OK^M$
+Alt-Svc: h3=":443"; ma=2592000^M$
+Padding: }?]($(}>}`^?]+($~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^M$
+Server: Caddy^M$
+Date: Sat, 31 Oct 2026 11:52:14 GMT^M$
+^M$
+HTTP/1.1 200 OK^M$
+Server: sp4-backend/1 ^M$
+Date: Sat, 31 Oct 2026 11:52:15 GMT^M$
+X-Site: v4^M$
+Content-Type: text/plain^M$
+Content-Length: 12^M$
+^M$
+SITE-BODY-v4[exit=0]
+--- tunnel output assertions ---
+
+$ grep -ci "x-site: v4" /tmp/d5-acl.out || true
+1
+[exit=0]
+
+$ grep -ci "SITE-BODY-v4" /tmp/d5-acl.out || true
+1
+[exit=0]
+
+$ grep -c "d5-inside-acl" /tmp/mc/backend.log || true
+1
+[exit=0]
+--- backend log, last 3 lines ---
+
+$ tail -3 /tmp/mc/backend.log
+127.0.0.1 - "CONNECT www.microsoft.com:443 HTTP/1.1" 200 -
+127.0.0.1 - "CONNECT www.microsoft.com:443 HTTP/1.1" 200 -
+127.0.0.1 - "GET /d5-inside-acl HTTP/1.1" 200 -
+[exit=0]
+caddy stopped; :443 is free
+
+--- caddy log, last 10 lines (delivery-shape run) ---
+{"level":"info","ts":1793447531.820963,"logger":"tls","msg":"finished cleaning storage units"}
+{"level":"info","ts":1793447531.8288052,"logger":"pki.ca.local","msg":"root certificate is already trusted by system","path":"storage:pki/authorities/local/root.crt"}
+{"level":"info","ts":1793447531.8289266,"msg":"autosaved config (load with --resume flag)","file":"/root/.config/caddy/autosave.json"}
+{"level":"info","ts":1793447531.8289332,"msg":"serving initial configuration"}
+{"level":"info","ts":1793447534.1527143,"msg":"shutting down apps, then terminating","signal":"SIGTERM"}
+{"level":"warn","ts":1793447534.1527457,"msg":"exiting; byeee!! 👋","signal":"SIGTERM"}
+{"level":"info","ts":1793447534.1527712,"logger":"http","msg":"servers shutting down with eternal grace period"}
+{"level":"info","ts":1793447534.152967,"logger":"tls.cache.maintenance","msg":"stopped background certificate maintenance","cache":"0x39ca31d0f900"}
+{"level":"info","ts":1793447534.153014,"logger":"admin","msg":"stopped previous server","address":"localhost:2019"}
+{"level":"info","ts":1793447534.1530244,"msg":"shutdown complete","signal":"SIGTERM","exit_code":0}
+
+--- final listener state ---
+no :443 / :80 listener

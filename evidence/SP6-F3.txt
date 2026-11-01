@@ -1,0 +1,155 @@
+SP6-F3 — unknown SNI: does not crash, does not misroute
+
+Spec:      D:\AiWork\Qoder\my-caddy-v4-SPEC.md §12.4 (SP6-F3)
+Host:      hcss-ecs-94ac (hw-gz), Ubuntu 24.04.4 LTS, x86_64, root
+Verdict:   PASS
+
+What ran: admin API `http://127.0.0.1:2019/config/` before and after
+`openssl s_client -servername <HOST-6>`, then the two log counts. The admin
+endpoint is Caddy's default localhost:2019 and was not disabled in the overlay.
+
+Results, each against its own observable:
+  1. admin 200 before, 200 after; one Caddy process before and after — the
+     process did not exit.
+  2. The handshake did not complete: `EXIT=1`, and openssl reports
+     `tlsv1 alert internal error ... SSL alert number 80`. Recorded verbatim.
+     This is a TLS alert, but it is NOT one of the two the spec names
+     (handshake_failure / unrecognized_name), and it is not a successful
+     handshake. Caddy has no certificate for a name no site claims, and
+     `tls internal` does not issue on demand for it, so it fails internally
+     rather than naming the unknown SNI. Flagged as an observation, not scored
+     as a pass condition: the two conditions that decide this item are 3 and 4.
+  3. xray access log: `grep -c <HOST-6>` = 0. The zero is not vacuous — a
+     proxied request through the REALITY inbound was made first and produced two
+     log lines (pasted), and the file is byte-identical before and after the
+     probe. Note that xray logs the proxied destination, not the offered SNI, so
+     the count is structurally 0; the byte-identical diff is the measurement
+     that can actually fail.
+  4. Caddy access log: `grep -c <HOST-6>` = 0 — no record at all, so the
+     "1 hit is allowed only if it fell to the catch-all" clause did not arise.
+     The a.test control in step 0 shows the same file being written at the same
+     time (one record, status 200).
+
+### host: hcss-ecs-94ac  date: 2026-10-31T14:00:13Z  kernel: 6.8.0-136-generic
+
+=== stack under test (admin API on the default localhost:2019, not disabled) ===
+    instances: caddy=1 xray=1 backend=1
+    LISTEN 0      5          127.0.0.1:8080       0.0.0.0:*          
+    LISTEN 0      4096       127.0.0.1:2019       0.0.0.0:*          
+    LISTEN 0      4096       127.0.0.1:19098      0.0.0.0:*          
+    LISTEN 0      4096               *:443              *:*          
+
+=== 0. positive controls: both logs must be demonstrably live ===
+    A zero count is only evidence if the same file is being written at
+    the same time, so each log is first made to record a known request.
+
+--- Caddy access log: a request to a.test ---
+$ ./curl -sk --resolve a.test:443:127.0.0.1 https://a.test/ -o /dev/null -w 'control_http=%{http_code}\n'
+control_http=200
+[exit=0]
+
+$ grep -c 'a.test' /tmp/mc/s6/caddy-access.log
+1
+[exit=0]
+
+$ grep 'a.test' /tmp/mc/s6/caddy-access.log | tail -1 | cut -c1-260
+{"level":"info","ts":1793455216.4049275,"logger":"http.log.access.log0","msg":"handled request","request":{"remote_ip":"127.0.0.1","remote_port":"53948","client_ip":"127.0.0.1","proto":"HTTP/2.0","method":"GET","host":"a.test","uri":"/","headers":{"User-Agent"
+[exit=0]
+
+
+--- xray access log: a request actually proxied through the REALITY inbound ---
+    xray writes its access log per proxied request, not per handshake, so
+    the control is a real request through the tunnel.
+$ bash /tmp/mc/s6/start-xray-client.sh
+xray client instances: 1
+LISTEN 0      4096       127.0.0.1:10800      0.0.0.0:*          
+[exit=0]
+
+$ ./curl -s --socks5-hostname 127.0.0.1:10800 -o /dev/null -w 'reality_warmup=%{http_code}\n' --max-time 40 https://www.apple.com/
+reality_warmup=200
+[exit=0]
+
+$ ./curl -s --socks5-hostname 127.0.0.1:10800 -o /dev/null -w 'reality_control=%{http_code}\n' --max-time 40 https://www.apple.com/
+reality_control=200
+[exit=0]
+
+$ ls -l /tmp/mc/s6/xray-access.log
+-rw------- 1 root root 158 Oct 31 22:00 /tmp/mc/s6/xray-access.log
+[exit=0]
+
+$ cat /tmp/mc/s6/xray-access.log
+2026/10/31 22:00:20.724130 from 127.0.0.1:53964 accepted tcp:www.apple.com:443
+2026/10/31 22:00:25.092182 from 127.0.0.1:53980 accepted tcp:www.apple.com:443
+[exit=0]
+
+$ wc -l < /tmp/mc/s6/xray-access.log
+2
+[exit=0]
+
+CONTROL xray access log is live: yes
+
+=== 1. admin API before ===
+$ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:2019/config/ | tee /tmp/f3.admin1
+200
+[exit=0]
+
+
+=== 2. handshake with an SNI no site claims ===
+$ timeout 10 openssl s_client -connect 127.0.0.1:443 -servername <HOST-6> -showcerts </dev/null > /tmp/f3.out 2>&1; echo "EXIT=$?"
+EXIT=1
+[exit=0]
+
+$ grep -iE 'alert|handshake failure|unrecognized name|subject=|issuer=|Cipher is' /tmp/f3.out
+4087D0AAFB7F0000:error:0A000438:SSL routines:ssl3_read_bytes:tlsv1 alert internal error:../ssl/record/rec_layer_s3.c:1599:SSL alert number 80
+New, (NONE), Cipher is (NONE)
+[exit=0]
+
+$ tail -4 /tmp/f3.out
+No ALPN negotiated
+Early data was not sent
+Verify return code: 0 (ok)
+---
+[exit=0]
+
+
+=== 3. admin API after (process survived?) ===
+$ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:2019/config/ | tee /tmp/f3.admin2
+200
+[exit=0]
+
+$ pgrep -af 'mc/[s]6/caddy run' | head -2
+78174 /tmp/mc/s6/caddy run --config /tmp/mc/s6/Caddyfile --adapter caddyfile
+[exit=0]
+
+
+=== 4. did the unknown SNI reach xray? ===
+$ grep -c '<HOST-6>' /tmp/mc/s6/xray-access.log
+0
+[exit=1]
+
+$ wc -l < /tmp/mc/s6/xray-access.log
+2
+[exit=0]
+
+DIFF xray access log after the probe: byte-identical to the pre-probe copy
+  grep exits 1 on zero matches; that is the desired result here. The
+  diff is the stronger form: the log grew by nothing, in a file proven
+  live in step 0. Note that xray logs the proxied destination, not the
+  offered SNI, so the '<HOST-6>' count is structurally 0; the diff
+  is the measurement that can actually fail.
+
+=== 5. did Caddy record it, and where did it land? ===
+$ grep -c '<HOST-6>' /tmp/mc/s6/caddy-access.log
+0
+[exit=1]
+
+$ grep '<HOST-6>' /tmp/mc/s6/caddy-access.log
+[exit=1]
+
+
+=== judgement ===
+observed admin_before=200 admin_after=200 xray_hits=0 caddy_hits=0
+CHECK admin 200 before and after : PASS
+CHECK xray access log hits for <HOST-6> == 0 : PASS
+  caddy_hits must be 0 or 1; if 1 the pasted line above must show the
+  catch-all answer (status 200), not B's 404.

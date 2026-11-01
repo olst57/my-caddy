@@ -1,0 +1,177 @@
+### date(UTC): 2026-10-31T11:46:29Z
+### host: hcss-ecs-94ac Linux 6.8.0-136-generic x86_64
+### caddy: v2.11.7 => /home/runner/work/my-caddy/my-caddy/.build/caddy-src@(devel)
+### caddy sha256: 1a9115339c7a0edefd692d74324bd4906508c40b11bb781e841d5910337b2624
+### SITE_DOMAIN=a.test WEB_PORT=18080 TARGET_HOST=www.microsoft.com
+### NAIVE_USER=<NAIVE_USER> NAIVE_PASS=<NAIVE_PASSWORD> (throwaway test credentials)
+
+=== overlay A (delivery shape, site-level basic_auth <NAIVE_USER> <NAIVE_PASSWORD>
+--- /tmp/mc/Caddyfile.a ---
+{
+	order forward_proxy before reverse_proxy
+}
+
+# Sprint 4 overlay A: the delivery shape, site-level basic_auth included.
+# Deviation from the task template: the `servers :443 { listener_wrappers { tls } }`
+# block is omitted because Caddy v2.11.7 refuses a tls-only wrapper list in first
+# position ("unnecessary ... because that is the default"). TLS termination is the
+# default path, so behaviour on :443 is unchanged; layer4 is Sprint 5 scope.
+:443, a.test {
+	tls internal
+
+	basic_auth {
+		tuser <PASSWORD_HASH>
+	}
+
+	forward_proxy {
+		basic_auth <NAIVE_USER> <NAIVE_PASSWORD>
+		probe_resistance
+		hide_ip
+		hide_via
+	}
+
+	reverse_proxy 127.0.0.1:18080
+}
+
+--- adapt exit / handler order ---
+adapt exit=0
+[{"hosts":[],"handlers":["authentication","forward_proxy","reverse_proxy"]}]
+
+caddy run pid=52979 config=/tmp/mc/Caddyfile.a listening on :443 after ~250ms
+
+--- listeners while caddy runs ---
+LISTEN 0      50         127.0.0.1:3306       0.0.0.0:*    users:(("mysqld",pid=20403,fd=23))                     
+LISTEN 0      5          127.0.0.1:18080      0.0.0.0:*    users:(("python3",pid=52610,fd=3))                     
+LISTEN 0      4096               *:80               *:*    users:(("caddy-linux-amd",pid=52979,fd=9))             
+LISTEN 0      4096               *:443              *:*    users:(("caddy-linux-amd",pid=52979,fd=7))             
+
+
+$ curl -sk --resolve a.test:443:127.0.0.1 https://a.test/ -D /tmp/d1.hdr -o /tmp/d1.body
+[exit=0]
+
+$ head -1 /tmp/d1.hdr
+HTTP/2 401 
+[exit=0]
+
+$ grep -i -e "^x-site:" -e "^proxy-authenticate:" -e "^www-authenticate:" /tmp/d1.hdr
+www-authenticate: Basic realm="restricted"
+[exit=0]
+
+$ cat /tmp/d1.body; echo
+
+[exit=0]
+
+--- full header block, overlay A ---
+HTTP/2 401 
+alt-svc: h3=":443"; ma=2592000
+server: Caddy
+www-authenticate: Basic realm="restricted"
+content-length: 0
+date: Sat, 31 Oct 2026 11:46:29 GMT
+
+
+=== DIAGNOSTIC on overlay A: does site-level basic_auth <NAIVE_USER> <NAIVE_PASSWORD> CONNECT? ===
+(not an acceptance item; run to locate where the block bites)
+
+$ printf 'CONNECT www.microsoft.com:443 HTTP/1.1\r\nHost: www.microsoft.com:443\r\nProxy-Authorization: Basic <NAIVE_BASIC_AUTH>\r\n\r\n' | timeout 15 openssl s_client -connect 127.0.0.1:443 -servername a.test -quiet -ign_eof 2>/dev/null | head -5
+HTTP/1.1 401 Unauthorized
+Alt-Svc: h3=":443"; ma=2592000
+Server: Caddy
+Www-Authenticate: Basic realm="restricted"
+Date: Sat, 31 Oct 2026 11:46:29 GMT
+[exit=0]
+
+$ printf 'CONNECT www.microsoft.com:443 HTTP/1.1\r\nHost: www.microsoft.com:443\r\n\r\n' | timeout 15 openssl s_client -connect 127.0.0.1:443 -servername a.test -quiet -ign_eof 2>/dev/null | head -5
+HTTP/1.1 401 Unauthorized
+Alt-Svc: h3=":443"; ma=2592000
+Server: Caddy
+Www-Authenticate: Basic realm="restricted"
+Date: Sat, 31 Oct 2026 11:46:29 GMT
+[exit=0]
+caddy stopped; :443 is free
+
+--- caddy log (overlay A), last 15 lines ---
+{"level":"info","ts":1793447189.2075694,"logger":"tls","msg":"finished cleaning storage units"}
+{"level":"warn","ts":1793447189.2103562,"logger":"pki.ca.local","msg":"installing root certificate (you might be prompted for password)","path":"storage:pki/authorities/local/root.crt"}
+{"level":"info","ts":1793447189.2104812,"msg":"warning: \"certutil\" is not available, install \"certutil\" with \"apt install libnss3-tools\" or \"yum install nss-tools\" and try again"}
+{"level":"info","ts":1793447189.2104862,"msg":"define JAVA_HOME environment variable to use the Java trust"}
+{"level":"info","ts":1793447189.216647,"logger":"tls.obtain","msg":"certificate obtained successfully","identifier":"a.test","issuer":"local"}
+{"level":"info","ts":1793447189.2166944,"logger":"tls.obtain","msg":"releasing lock","identifier":"a.test"}
+{"level":"info","ts":1793447189.5221465,"msg":"shutting down apps, then terminating","signal":"SIGTERM"}
+{"level":"warn","ts":1793447189.5221665,"msg":"exiting; byeee!! 👋","signal":"SIGTERM"}
+{"level":"info","ts":1793447189.9331622,"msg":"certificate installed properly in linux trusts"}
+{"level":"info","ts":1793447189.9333842,"msg":"autosaved config (load with --resume flag)","file":"/root/.config/caddy/autosave.json"}
+{"level":"info","ts":1793447189.9334009,"msg":"serving initial configuration"}
+{"level":"info","ts":1793447189.9334111,"logger":"http","msg":"servers shutting down with eternal grace period"}
+{"level":"info","ts":1793447189.9335575,"logger":"tls.cache.maintenance","msg":"stopped background certificate maintenance","cache":"0x1bbd4b39ac80"}
+{"level":"info","ts":1793447189.9335995,"logger":"admin","msg":"stopped previous server","address":"localhost:2019"}
+{"level":"info","ts":1793447189.9336054,"msg":"shutdown complete","signal":"SIGTERM","exit_code":0}
+
+
+=== overlay B (identical minus the site-level basic_auth <NAIVE_USER> <NAIVE_PASSWORD>
+--- /tmp/mc/Caddyfile.b ---
+{
+	order forward_proxy before reverse_proxy
+}
+
+# Sprint 4 overlay B: delivery shape MINUS the site-level basic_auth block.
+# Same listener_wrappers deviation as overlay A (see Caddyfile.a).
+:443, a.test {
+	tls internal
+
+	forward_proxy {
+		basic_auth <NAIVE_USER> <NAIVE_PASSWORD>
+		probe_resistance
+		hide_ip
+		hide_via
+	}
+
+	reverse_proxy 127.0.0.1:18080
+}
+
+--- adapt exit / handler order ---
+adapt exit=0
+[{"hosts":[],"handlers":["forward_proxy","reverse_proxy"]}]
+
+caddy run pid=53951 config=/tmp/mc/Caddyfile.b listening on :443 after ~250ms
+
+
+$ curl -sk --resolve a.test:443:127.0.0.1 https://a.test/ -D /tmp/d1.hdr -o /tmp/d1.body
+[exit=0]
+
+$ head -1 /tmp/d1.hdr
+HTTP/2 200 
+[exit=0]
+
+$ grep -i -e "^x-site:" -e "^proxy-authenticate:" /tmp/d1.hdr
+x-site: v4
+[exit=0]
+
+$ cat /tmp/d1.body; echo
+SITE-BODY-v4
+[exit=0]
+
+--- full header block, overlay B ---
+HTTP/2 200 
+alt-svc: h3=":443"; ma=2592000
+content-type: text/plain
+date: Sat, 31 Oct 2026 11:46:30 GMT
+server: sp4-backend/1
+via: 1.1 Caddy
+x-site: v4
+content-length: 12
+
+
+--- backend fixed body for comparison ---
+
+$ curl -s -D - -o /dev/null http://127.0.0.1:18080/ | head -5
+HTTP/1.1 200 OK
+Server: sp4-backend/1 
+Date: Sat, 31 Oct 2026 11:46:30 GMT
+X-Site: v4
+Content-Type: text/plain
+[exit=0]
+caddy stopped; :443 is free
+
+--- final listener state ---
+no :443 listener

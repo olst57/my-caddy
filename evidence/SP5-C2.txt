@@ -1,0 +1,209 @@
+SP5-C2 — the real client IP appears in xray's access log
+
+Spec:      D:\AiWork\Qoder\my-caddy-v4-SPEC.md §11.4 (SP5-C2)
+Host:      hcss-ecs-94ac (hw-gz), Ubuntu 24.04.4 LTS, x86_64, root
+Xray:      26.10.29 (0afec66, go1.27.3 linux/amd64)
+Caddy:     delivery build, sha256 1a9115339c7a0edefd692d74324bd4906508c40b11bb781e841d5910337b2624
+Verdict:   PASS (deviation D-2: sendThrough not honoured; distinct source address used instead)
+
+What ran: an xray client with a socks inbound on 10800 and a VLESS/REALITY
+outbound with `serverName b.test`, dialing the host's own private address
+<PUBLIC_IP-1>:443 so that the client's source address differs from Caddy's layer4
+upstream dial (127.0.0.1 -> 127.0.0.1:19098). Captures on both hops, then the
+xray access log.
+
+Deviation D-2 (scoring relevant): the spec's recipe is outbound
+`"sendThrough": "<PUBLIC_IP-4>"`. This xray build accepts that key and does not
+apply it: with `sendThrough` set to <PUBLIC_IP-4> a plain freedom outbound still
+arrives at the listener from 127.0.0.1, and an impossible value
+(`999.999.999.999`) still passes `xray run -test`. The probe is at the end of
+this file. The substitute source address <PUBLIC_IP-1> is a strictly different
+address from the l4 dial address, so the validity precondition the spec states
+("client source must differ from the l4 outbound address") is met, by a
+different mechanism than the one suggested.
+
+Note on the two requests below: the first request of a freshly started client is
+labelled "warm-up" because that connection stalls intermittently (deviation D-4
+in SPRINT5-SUMMARY.md). In this particular run the warm-up did not stall — it
+returned 200 in 2.0 s — so no retry was needed and both requests are valid. The
+measured request is the one with the captures around it.
+
+Everything below the rule is the untruncated output of the run named above:
+each `$ ` line is the command that was executed (verbatim, via eval of the
+same string that was printed), followed by its own output and `[exit=N]`.
+grep exits 1 when it matches nothing; where that exit code appears it is the
+"zero matches" result, not an error.
+
+------------------------------------------------------------------------------
+### host: hcss-ecs-94ac  date: 2026-10-31T13:25:02Z
+
+    caddyfile=Caddyfile.pp xraycfg=xray-server.json
+    LISTEN 0      4096       127.0.0.1:19098      0.0.0.0:*    users:(("xray",pid=70498,fd=4))                        
+    LISTEN 0      4096               *:443              *:*    users:(("caddy",pid=70499,fd=8))                       
+--- client config: outbound destination ---
+$ jq -c '.outbounds[0].settings.vnext[0] | {address, port}' xray-client-172.json
+{"address":"<PUBLIC_IP-1>","port":443}
+[exit=0]
+
+$ ss -ltnp | grep ':10800'
+LISTEN 0      4096       127.0.0.1:10800      0.0.0.0:*    users:(("xray",pid=70520,fd=4))                        
+[exit=0]
+
+--- warm-up request (first dial to this address stalls; measured request follows) ---
+$ curl -s --socks5-hostname 127.0.0.1:10800 -o /dev/null -w 'warmup_http=%{http_code} time=%{time_total}\n' --max-time 40 https://www.apple.com/
+warmup_http=200 time=2.015213
+[exit=0]
+
+--- measured request, with capture on both sides ---
+$ ( timeout 15 tcpdump -i lo -s 0 -w /tmp/mc/s5/c2.pcap "tcp port 443 or tcp port 19098" ) &
+$ curl -s --socks5-hostname 127.0.0.1:10800 -o /dev/null -w '%{http_code}\n' --max-time 40 https://www.apple.com/
+200
+[exit=0]
+
+--- who connected to :443 (client source address) ---
+$ tcpdump -nn -r /tmp/mc/s5/c2.pcap 'tcp dst port 443 and (tcp[tcpflags] & tcp-syn) != 0' -c 2
+reading from file /tmp/mc/s5/c2.pcap, link-type EN10MB (Ethernet), snapshot length 262144
+21:25:12.989252 IP <PUBLIC_IP-1>.49182 > <PUBLIC_IP-1>.443: Flags [S], seq 1265327110, win 65495, options [mss 65495,sackOK,TS val 2212901038 ecr 0,nop,wscale 7], length 0
+[exit=0]
+
+--- PROXY v2 header seen on the l4 -> xray hop ---
+$ python3 extract_payload.py /tmp/mc/s5/c2.pcap
+pkt1   <PUBLIC_IP-1>:49182 -> <PUBLIC_IP-1>:443  seq=1265327111 len=1812  hex=160301070f0100070b0303e2bdfd69a23fbe6d1f712fc3d39907a4f4c95f6d0338af3530548dade4f56d62200919e73e
+pkt2   127.0.0.1:46988 -> 127.0.0.1:19098  seq=2694317263 len=28  hex=0d0a0d0a000d0a515549540a2111000cac1f025fac1f025fc01e01bb
+pkt3   127.0.0.1:46988 -> 127.0.0.1:19098  seq=2694317291 len=1812  hex=160301070f0100070b0303e2bdfd69a23fbe6d1f712fc3d39907a4f4c95f6d0338af3530548dade4f56d62200919e73e
+pkt4   127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426105340 len=9901  hex=16030304ba020004b60303c8cedcec12b1151b70b5d060a5faed8bc7d535994fa040e2bc63c71e7ce3d382200919e73e
+pkt5   <PUBLIC_IP-1>:443 -> <PUBLIC_IP-1>:49182  seq=2478489739 len=9901  hex=16030304ba020004b60303c8cedcec12b1151b70b5d060a5faed8bc7d535994fa040e2bc63c71e7ce3d382200919e73e
+pkt6   <PUBLIC_IP-1>:49182 -> <PUBLIC_IP-1>:443  seq=1265328923 len=80  hex=1403030001011703030045d638c17b63555894761cb37a0eb6c4b5d54908901a4adfb10c637a56164f6689bbfacfac3e
+pkt7   127.0.0.1:46988 -> 127.0.0.1:19098  seq=2694319103 len=80  hex=1403030001011703030045d638c17b63555894761cb37a0eb6c4b5d54908901a4adfb10c637a56164f6689bbfacfac3e
+pkt8   <PUBLIC_IP-1>:49182 -> <PUBLIC_IP-1>:443  seq=1265329003 len=1030  hex=1703030401b953633c5303b53374210cfd9d1a862c7f56a29fe0ef8eea3f9f68b78e4cbd77e2f9b981db56d78b9c6529
+pkt9   127.0.0.1:46988 -> 127.0.0.1:19098  seq=2694319183 len=1030  hex=1703030401b953633c5303b53374210cfd9d1a862c7f56a29fe0ef8eea3f9f68b78e4cbd77e2f9b981db56d78b9c6529
+pkt10  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426115241 len=1208  hex=17030304b3ddca391e6f5228ae581d614938d81e640107fa7dc2486ecee79d26e51654a0f9b8558baa2c6d66ed59a86e
+pkt11  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426116449 len=2394  hex=17030309550ca00b7cc30e9b0d437ecc5a4dd170690ab25156caa0315f1891b56339e2762d98e318478ea26b003a37df
+pkt12  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426118843 len=528  hex=170303020bf713edf9b8a4a2ed66db599717dbd4dd9e06c19660fceb008b1eb7c0ffdf0ba63d6cd8e4edb0c7dc9d66af
+pkt13  <PUBLIC_IP-1>:443 -> <PUBLIC_IP-1>:49182  seq=2478499640 len=3602  hex=17030304b3ddca391e6f5228ae581d614938d81e640107fa7dc2486ecee79d26e51654a0f9b8558baa2c6d66ed59a86e
+pkt14  <PUBLIC_IP-1>:443 -> <PUBLIC_IP-1>:49182  seq=2478503242 len=528  hex=170303020bf713edf9b8a4a2ed66db599717dbd4dd9e06c19660fceb008b1eb7c0ffdf0ba63d6cd8e4edb0c7dc9d66af
+pkt15  <PUBLIC_IP-1>:49182 -> <PUBLIC_IP-1>:443  seq=1265330033 len=943  hex=17030303aa3606ca6e5938ace2dc0596a439402142db02c66d3b28ccea9a75691f2e7866bc36aa9cfcbcc651f1b052f6
+pkt16  127.0.0.1:46988 -> 127.0.0.1:19098  seq=2694320213 len=943  hex=17030303aa3606ca6e5938ace2dc0596a439402142db02c66d3b28ccea9a75691f2e7866bc36aa9cfcbcc651f1b052f6
+pkt17  <PUBLIC_IP-1>:49182 -> <PUBLIC_IP-1>:443  seq=1265330976 len=1148  hex=1703030477e934720bb4dfda11af3ad291de60849ef766f51cab714083cbda1890a5ff966df1a9c783afc252b9e68fa1
+pkt18  <PUBLIC_IP-1>:49182 -> <PUBLIC_IP-1>:443  seq=1265332124 len=61  hex=1703030038b6aef24dd82fd88798d37c39fef1dcfbbdfe90de699eb5c4ca47edb60a2af5f4db289874e8716cf4460969
+pkt19  127.0.0.1:46988 -> 127.0.0.1:19098  seq=2694321156 len=1209  hex=1703030477e934720bb4dfda11af3ad291de60849ef766f51cab714083cbda1890a5ff966df1a9c783afc252b9e68fa1
+pkt20  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426119371 len=966  hex=17030303c1d57c5fe1d3ef2b760bb93b4b919ffca1e1de3fb8596a176a39a94af313bba7ff6b9085edab240f10d454be
+pkt21  <PUBLIC_IP-1>:443 -> <PUBLIC_IP-1>:49182  seq=2478503770 len=966  hex=17030303c1d57c5fe1d3ef2b760bb93b4b919ffca1e1de3fb8596a176a39a94af313bba7ff6b9085edab240f10d454be
+pkt22  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426120337 len=279  hex=17030301123363f5110e3aee599300c2a2f29ba6e7e8c3f5e6ad3114aa0458e880f672f4af1fb2e1397065394d94de92
+pkt23  <PUBLIC_IP-1>:443 -> <PUBLIC_IP-1>:49182  seq=2478504736 len=279  hex=17030301123363f5110e3aee599300c2a2f29ba6e7e8c3f5e6ad3114aa0458e880f672f4af1fb2e1397065394d94de92
+pkt24  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426120616 len=71  hex=17030300420a178828c787f2f1b119bb69f8a1094a4022204d65c7817210e3eb52e321c0d94e1a199e0338e3d0f55af7
+pkt25  <PUBLIC_IP-1>:443 -> <PUBLIC_IP-1>:49182  seq=2478505015 len=71  hex=17030300420a178828c787f2f1b119bb69f8a1094a4022204d65c7817210e3eb52e321c0d94e1a199e0338e3d0f55af7
+pkt26  <PUBLIC_IP-1>:49182 -> <PUBLIC_IP-1>:443  seq=1265332185 len=31  hex=170303001a82efd1a9bbe510f55f574a33672c39dcc27afae8a92f1dfaa71f
+pkt27  127.0.0.1:46988 -> 127.0.0.1:19098  seq=2694322365 len=31  hex=170303001a82efd1a9bbe510f55f574a33672c39dcc27afae8a92f1dfaa71f
+pkt28  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426120687 len=2920  hex=17030340112d1890ba467555064f1a3902c9d6802cd5dd92967ac46ad8d7dbcdee1629d78a4ed32b0341b9213e8b0800
+pkt29  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426123607 len=2920  hex=c215dc2eca0c7a409bc3afb48a8b70016c128d0c52b721ab14b01e420174f1300c1a31057f8b98f43eebff613ae28741
+pkt30  <PUBLIC_IP-1>:443 -> <PUBLIC_IP-1>:49182  seq=2478505086 len=5840  hex=17030340112d1890ba467555064f1a3902c9d6802cd5dd92967ac46ad8d7dbcdee1629d78a4ed32b0341b9213e8b0800
+pkt31  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426126527 len=2920  hex=356b0b1e6b89907b621466e4bce2468a0512d185a0469497ca7bb8c86e147134345f762c248c117f1b9d7002951d34c9
+pkt32  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426129447 len=2920  hex=51c70834a86067196835fcf9e9f577a375ef790d7da9c8cb1fa37938706cb485948e40555a1be1c8080134f1a7c5aff0
+pkt33  <PUBLIC_IP-1>:443 -> <PUBLIC_IP-1>:49182  seq=2478510926 len=5840  hex=356b0b1e6b89907b621466e4bce2468a0512d185a0469497ca7bb8c86e147134345f762c248c117f1b9d7002951d34c9
+pkt34  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426132367 len=2920  hex=2978f269fb3c1a56c5740c5ee0a4ea4ee5151265ed13295f98e32fe4cebb447a5c2439874fb251de07f1f0d07ef5439b
+pkt35  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426135287 len=2920  hex=414db239359ac862078c5ec709106d427ed7ea298030aa276c32eaee82751f0d3695f67da42813aeb3d116a1d8864148
+pkt36  <PUBLIC_IP-1>:443 -> <PUBLIC_IP-1>:49182  seq=2478516766 len=5840  hex=2978f269fb3c1a56c5740c5ee0a4ea4ee5151265ed13295f98e32fe4cebb447a5c2439874fb251de07f1f0d07ef5439b
+pkt37  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426138207 len=4380  hex=21df30f2697e32a2e74211b10e066dc27cc0c236c23277f79392b901906a797ba541b2ddf1f8f6725c8f07cd20e718ed
+pkt38  <PUBLIC_IP-1>:443 -> <PUBLIC_IP-1>:49182  seq=2478522606 len=4380  hex=21df30f2697e32a2e74211b10e066dc27cc0c236c23277f79392b901906a797ba541b2ddf1f8f6725c8f07cd20e718ed
+pkt39  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426142587 len=13140  hex=6bad51954e2b46bad9fd4f02d2121764cdeb39947467183138083c5f64ee7bdc6b3bacbde04b066e13756c3646d6e330
+pkt40  <PUBLIC_IP-1>:443 -> <PUBLIC_IP-1>:49182  seq=2478526986 len=13140  hex=6bad51954e2b46bad9fd4f02d2121764cdeb39947467183138083c5f64ee7bdc6b3bacbde04b066e13756c3646d6e330
+pkt41  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426155727 len=1460  hex=df41219e6fd40ca22b079493e8335ea336c68bed03a443b21213110ff97a1e76843f2c2e5a4e10c63e97beb803dd15cf
+pkt42  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426157187 len=4380  hex=6e2ca6a893dd8248dbb867b84a648e38328ac4b617dadec706cd6fd14b55b369ecbeeede88b0f48fcd6c3256a701a08d
+pkt43  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426161567 len=1460  hex=603cd0b97171a2295597b19b029e521c0acb79d244d0aa48c845e5c41ae50ee6cf44fbad322af73ec843b5874a453493
+pkt44  <PUBLIC_IP-1>:443 -> <PUBLIC_IP-1>:49182  seq=2478540126 len=7300  hex=df41219e6fd40ca22b079493e8335ea336c68bed03a443b21213110ff97a1e76843f2c2e5a4e10c63e97beb803dd15cf
+pkt45  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426163027 len=4380  hex=b76b9c1434e0fa86d3790e56a654090472b1c3a1581febb0fe82dc436588dbe4507bdb707c691fa4266b4a5df114f00f
+pkt46  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426167407 len=13140  hex=886d3c517d9640beb3b2c77623a058135ec9f43e167792fb2db4025985c460f23da1cfbd753be4250745684cb38126a5
+pkt47  <PUBLIC_IP-1>:443 -> <PUBLIC_IP-1>:49182  seq=2478547426 len=17520  hex=b76b9c1434e0fa86d3790e56a654090472b1c3a1581febb0fe82dc436588dbe4507bdb707c691fa4266b4a5df114f00f
+pkt48  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426180547 len=8760  hex=a4fc1eb0841a833e4ecea34efd6481d7611a5067401e23a1bc792dee39fed92e8ac0ef36108e974f95bbce4f1cf1e90b
+pkt49  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426189307 len=4380  hex=1156cfe84cb67625f66e4f6eea2aa229e689a5c9e639f4e5b7cd3df0fb83cb2f28a20c7e5217a74327d46927a66bff97
+pkt50  <PUBLIC_IP-1>:443 -> <PUBLIC_IP-1>:49182  seq=2478564946 len=13140  hex=a4fc1eb0841a833e4ecea34efd6481d7611a5067401e23a1bc792dee39fed92e8ac0ef36108e974f95bbce4f1cf1e90b
+pkt51  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426193687 len=5840  hex=82690082dbceb96b938fb05909e826cd36ada0f13b3a96be56471a8599cdc75aa327efa24c02cb9c8961e333d1e6ee0a
+pkt52  <PUBLIC_IP-1>:443 -> <PUBLIC_IP-1>:49182  seq=2478578086 len=5840  hex=82690082dbceb96b938fb05909e826cd36ada0f13b3a96be56471a8599cdc75aa327efa24c02cb9c8961e333d1e6ee0a
+pkt53  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426199527 len=5840  hex=aadfc7a62dd7f2a60afb1c7f691e2d076ff8bfd1f939ea97ed45fef6b7b16b66542a49411917a21a76b87bc26dde4127
+pkt54  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426205367 len=16060  hex=28ca332d719f7924e388b5cc8c785b9c22832b2097589d62a8c6ae9e4cd22f90ea40268afc4e621db2c4db89c5588bd4
+pkt55  <PUBLIC_IP-1>:443 -> <PUBLIC_IP-1>:49182  seq=2478583926 len=21900  hex=aadfc7a62dd7f2a60afb1c7f691e2d076ff8bfd1f939ea97ed45fef6b7b16b66542a49411917a21a76b87bc26dde4127
+pkt56  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426221427 len=13140  hex=1155a490c71048d5efca9650658a517414adb94096754e9364507934d892d6c882f2f897c04a2e571afde7f8d4c7ba22
+pkt57  <PUBLIC_IP-1>:443 -> <PUBLIC_IP-1>:49182  seq=2478605826 len=13140  hex=1155a490c71048d5efca9650658a517414adb94096754e9364507934d892d6c882f2f897c04a2e571afde7f8d4c7ba22
+pkt58  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426234567 len=1460  hex=907827ef8d64c13e7b87e86edb31ff6185cc12f20b7eb4142949119c10b61a2e256dbf75fe28ac8257d670920aaa607d
+pkt59  <PUBLIC_IP-1>:443 -> <PUBLIC_IP-1>:49182  seq=2478618966 len=1460  hex=907827ef8d64c13e7b87e86edb31ff6185cc12f20b7eb4142949119c10b61a2e256dbf75fe28ac8257d670920aaa607d
+pkt60  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426236027 len=1460  hex=4505038d497231d940f7e9586b62a4c74801fa795f72563410cb4807e314f7c4d01f8dcc2ba7c9faef5150640d07b16e
+pkt61  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426237487 len=11680  hex=09e23e4fa13f14435109b5faf470f85c71d942940f3fa439c28292bf52ae2ffa1e99a29626ed3b83e581555f691ac2fe
+pkt62  <PUBLIC_IP-1>:443 -> <PUBLIC_IP-1>:49182  seq=2478620426 len=13140  hex=4505038d497231d940f7e9586b62a4c74801fa795f72563410cb4807e314f7c4d01f8dcc2ba7c9faef5150640d07b16e
+pkt63  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426249167 len=13140  hex=851f7514733de060b0fd3cd38d31c4046c5772c7d2659a986d22c6a1e0439d5c4b67b3be8e66a51949b1ef8df2664e00
+pkt64  <PUBLIC_IP-1>:443 -> <PUBLIC_IP-1>:49182  seq=2478633566 len=13140  hex=851f7514733de060b0fd3cd38d31c4046c5772c7d2659a986d22c6a1e0439d5c4b67b3be8e66a51949b1ef8df2664e00
+pkt65  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426262307 len=10220  hex=8afac4b443a1a2998b561f3d95e83bc94a093f34d86c869e2806f7a21f75f6da36bd73c22a906096c2c27bcc4885e635
+pkt66  <PUBLIC_IP-1>:443 -> <PUBLIC_IP-1>:49182  seq=2478646706 len=10220  hex=8afac4b443a1a2998b561f3d95e83bc94a093f34d86c869e2806f7a21f75f6da36bd73c22a906096c2c27bcc4885e635
+pkt67  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426272527 len=14600  hex=5b59ae15ad5af026a68cab7d1752af899cb8a76110a2c788cb60381e6ef05766f463df99bf017e57e2d33a8279c77b73
+pkt68  <PUBLIC_IP-1>:443 -> <PUBLIC_IP-1>:49182  seq=2478656926 len=14600  hex=5b59ae15ad5af026a68cab7d1752af899cb8a76110a2c788cb60381e6ef05766f463df99bf017e57e2d33a8279c77b73
+pkt69  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426287127 len=4380  hex=a97e6214313820af19c888b1177225c86d6d18dd92bbfe2d5ddeb393c68a023a2d7efe7bf218347dbfe552ca42eb4c96
+pkt70  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426291507 len=11680  hex=21b69843153d464f78ac513420f766d2891774ab7ebe0314c863b8c9cddbb93f153185c6a812819e99dba3d82bd6bec3
+pkt71  <PUBLIC_IP-1>:443 -> <PUBLIC_IP-1>:49182  seq=2478671526 len=16060  hex=a97e6214313820af19c888b1177225c86d6d18dd92bbfe2d5ddeb393c68a023a2d7efe7bf218347dbfe552ca42eb4c96
+pkt72  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426303187 len=5840  hex=7c1582e2a036f42ee9c391b12dc604c168f33ab090c65fb13306afab95223157b6bdc326f846726e23de4a28448ccb22
+pkt73  <PUBLIC_IP-1>:443 -> <PUBLIC_IP-1>:49182  seq=2478687586 len=5840  hex=7c1582e2a036f42ee9c391b12dc604c168f33ab090c65fb13306afab95223157b6bdc326f846726e23de4a28448ccb22
+pkt74  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426309027 len=4380  hex=1dbe7377986af39de583ec71714dc0537ea03ec07f03c887903c2a05165b391d31bdb02acb73d8377b024d68e22dd8e6
+pkt75  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426313407 len=16060  hex=28213ba49aa123ddc4b70e868e15c7b119ad2693f73ddbc23ce1012b45179367b06983cc61cb20f9aba7ec49563fe373
+pkt76  <PUBLIC_IP-1>:443 -> <PUBLIC_IP-1>:49182  seq=2478693426 len=20440  hex=1dbe7377986af39de583ec71714dc0537ea03ec07f03c887903c2a05165b391d31bdb02acb73d8377b024d68e22dd8e6
+pkt77  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426329467 len=7300  hex=74fa429361dea8d8b845db2fe926d0458fabd055b36fee209d6004782f068258877aa25158eb7af00e17d37d55692d32
+pkt78  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426336767 len=8760  hex=2c1e453922a3fc2c032c5c3bd993044eb44c1825ab13a75f09e12697412eec6805e1b0ca2c3957b884440b089e0f5992
+pkt79  <PUBLIC_IP-1>:443 -> <PUBLIC_IP-1>:49182  seq=2478713866 len=16060  hex=74fa429361dea8d8b845db2fe926d0458fabd055b36fee209d6004782f068258877aa25158eb7af00e17d37d55692d32
+pkt80  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426345527 len=2920  hex=a84cd597faef46d4124f6e6a46727aadb16c9f249a7937a266f2f28790af5b58ace2d869f775df09395481b0d625d2fc
+pkt81  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426348447 len=4380  hex=75b6aa1e70b7ac63eb8da48c08ad392cf1be3e41272425bc6d480f90b20b755d02b01f7924bc002606ee67f72b572827
+pkt82  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426352827 len=17520  hex=657d7c670905dddd7b7e967b9d056d6e11e8605ba6a06199856b073cd2b0a4afcfa8827bece1b890f0d39357f32a21f8
+pkt83  <PUBLIC_IP-1>:443 -> <PUBLIC_IP-1>:49182  seq=2478729926 len=24820  hex=a84cd597faef46d4124f6e6a46727aadb16c9f249a7937a266f2f28790af5b58ace2d869f775df09395481b0d625d2fc
+pkt84  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426370347 len=4380  hex=2620b6277b6a3a3fb53eac89fb2ff7fa71968e8f79e9ae053ff80922be8860c7b8e75d9455570800294a9258555df8a6
+pkt85  127.0.0.1:19098 -> 127.0.0.1:46988  seq=1426374727 len=4221  hex=171941fb989e0804688b87aa748190edc4376038c0e785329dcda2b762a7d483b92493258cabd5b762fb84c58de5a272
+pkt86  <PUBLIC_IP-1>:443 -> <PUBLIC_IP-1>:49182  seq=2478754746 len=8601  hex=2620b6277b6a3a3fb53eac89fb2ff7fa71968e8f79e9ae053ff80922be8860c7b8e75d9455570800294a9258555df8a6
+pkt87  <PUBLIC_IP-1>:49182 -> <PUBLIC_IP-1>:443  seq=1265332216 len=24  hex=17030300138f2bce268fd8ce34e2e9327910b074d08d9d75
+pkt88  127.0.0.1:46988 -> 127.0.0.1:19098  seq=2694322396 len=24  hex=17030300138f2bce268fd8ce34e2e9327910b074d08d9d75
+---
+FIRST_SEGMENT_TO_19098: 0d0a0d0a000d0a515549540a2111000cac1f025fac1f025fc01e01bb
+STREAM_TO_19098_PREFIX_64: 0d0a0d0a000d0a515549540a2111000cac1f025fac1f025fc01e01bb160301070f0100070b0303e2bdfd69a23fbe6d1f712fc3d39907a4f4c95f6d0338af3530
+STREAM_BYTE0_12_EQ_PROXY_V2_SIG: True
+STREAM_BYTE12_VER_CMD: 21
+STREAM_BYTE13_FAMILY_PROTO: 11
+PROXY_HDR_LEN_FIELD: 12
+PROXIED_SRC: <PUBLIC_IP-1>:49182
+PROXIED_DST: <PUBLIC_IP-1>:443
+BYTES_28_31_AFTER_PROXY_HDR: 160301
+IS_16_03_01: True
+[exit=0]
+
+--- xray access log: PROXY-reported source ---
+$ grep -o 'from [0-9.]*:' /tmp/mc/s5/xray-access.log | sort -u
+from <PUBLIC_IP-1>:
+[exit=0]
+
+$ grep -c 'from <PUBLIC_IP-1>:' /tmp/mc/s5/xray-access.log
+2
+[exit=0]
+
+$ grep -c 'from 127.0.0.1:' /tmp/mc/s5/xray-access.log
+0
+[exit=1]
+
+--- raw access log ---
+$ cat /tmp/mc/s5/xray-access.log
+2026/10/31 21:25:11.922151 from <PUBLIC_IP-1>:49170 accepted tcp:www.apple.com:443
+2026/10/31 21:25:15.289695 from <PUBLIC_IP-1>:49182 accepted tcp:www.apple.com:443
+[exit=0]
+
+=== why the client address is <PUBLIC_IP-1> and not a sendThrough alias ===
+The spec suggests outbound "sendThrough": "<PUBLIC_IP-4>". That key is accepted
+but not applied by this build, shown below.
+$ jq -c '.outbounds[0].streamSettings.sockopt' st-client.json
+{"sendThrough":"<PUBLIC_IP-4>"}
+[exit=0]
+
+$ curl -s --max-time 5 --socks5-hostname 127.0.0.1:10802 http://127.0.0.1:9999/ -o /dev/null -w 'probe_http=%{http_code}\n'
+probe_http=000
+[exit=52]
+
+$ cat /tmp/mc/s5/st-listen.out
+LISTENER_SAW_PEER=127.0.0.1:36204
+[exit=0]
+
+$ jq '.outbounds[0].streamSettings.sockopt.sendThrough = "999.999.999.999"' st-client.json >st-bad.json && ./xray run -test -c st-bad.json 2>&1 | tail -2
+2026/10/31 21:25:33.072520 [Info] infra/conf/serial: Reading config: &{Name:st-bad.json Format:json}
+Configuration OK.
+[exit=0]

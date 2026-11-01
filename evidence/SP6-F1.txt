@@ -1,0 +1,119 @@
+SP6-F1 — H3 connectivity to the site
+
+Spec:      D:\AiWork\Qoder\my-caddy-v4-SPEC.md §12.4 (SP6-F1)
+Host:      hcss-ecs-94ac (hw-gz), Ubuntu 24.04.4 LTS, x86_64, root
+Verdict:   PASS
+
+What ran: `curl -V | grep -o HTTP3` on the host first. The host's curl 8.5.0
+has no HTTP/3, which the spec treats as an environment shortfall; that result
+is recorded verbatim and no HTTP/2 result is substituted for it. A static curl
+8.23.0 with ngtcp2/1.25.0 and nghttp3/1.18.0 was therefore downloaded on the
+authoring host and copied up (provenance pasted in step 2), and the judged
+request ran with it:
+
+  ./curl --http3-only -sk --resolve a.test:443:127.0.0.1 https://a.test/ -D /tmp/f1.hdr -o /tmp/f1.body -w '%{http_version} %{http_code}\n'
+
+Observed: `3 200`, `x-site: v4`, body `SITE-BODY-v4`. Judged on
+%{http_version} alone, per the spec's note.
+
+Note on the status line: with curl 8.23.0 the status line for an H3 response
+prints as `HTTP/3 200`, not `HTTP/2 200` as the spec's note predicts for older
+builds. The judgement does not use the status-line text, and the HTTP/2 control
+in step 6 reports version 2, which is what makes %{http_version} discriminating.
+
+### host: hcss-ecs-94ac  date: 2026-10-31T13:58:13Z  kernel: 6.8.0-136-generic
+
+=== stack under test (delivery overlay, placeholders substituted) ===
+    instances: caddy=1 xray=1 backend=1
+    LISTEN 0      5          127.0.0.1:8080       0.0.0.0:*          
+    LISTEN 0      4096       127.0.0.1:2019       0.0.0.0:*          
+    LISTEN 0      4096       127.0.0.1:19098      0.0.0.0:*          
+    LISTEN 0      4096               *:443              *:*          
+
+=== step 1: does the host's own curl speak HTTP/3? ===
+$ curl -V | grep -o 'HTTP3'
+[exit=1]
+
+  A nonzero exit above means no HTTP/3 in the host curl: an environment
+  shortfall, recorded as such. It is not an SP6-F1 result, and an HTTP/2
+  response is never substituted for one.
+
+=== step 2: the static build the measurement actually uses ===
+$ cat /tmp/mc/s6/PROVENANCE.txt
+SP6 tool provenance. Both binaries were downloaded on the Windows authoring host
+and copied up with scp, because the server cannot reliably reach <HOST-4>
+(same transfer rule as Sprint 5).
+
+curl — stunnel/static-curl, tag 8.23.0-1
+  source   https://<HOST-5>/static-curl/releases/download/8.23.0-1/curl-linux-x86_64-glibc-8.23.0-1.tar.xz
+  archive  curl-linux-x86_64-glibc-8.23.0-1.tar.xz
+           sha256 a9f5d72eb245623f82a649bf64acae0c935af3510700d2167857964c47fe9e5b
+  binary   sha256 b19756efa22538f0af3bb293626841c9dbf0d168489a1924f0e3edec2f560ba6
+           (this is the digest listed for `curl` in the archive's own
+           SHA256SUMS, so the transfer is verified, not merely recorded)
+  version  curl 8.23.0 (x86_64-pc-linux-gnu) libcurl/8.23.0 OpenSSL/4.0.3
+           ngtcp2/1.25.0 nghttp3/1.18.0 — HTTP3 present
+
+naive — klzgrad/naiveproxy, tag v154.0.8037.49-5
+  source   https://github.com/klzgrad/naiveproxy/releases/download/v154.0.8037.49-5/naiveproxy-v154.0.8037.49-5-linux-x64.tar.xz
+  archive  sha256 80214dfea1767f6ecf63a3a79dc9f48b203460f51abc609357fff48dd5844c7d
+  binary   sha256 f86c52be454eebc9134aad476f3fe91fcf90df7200c3df262a4d0a3d2de85464
+  version  naive 154.0.8037.49
+[exit=0]
+
+$ ./curl -V | head -2
+curl 8.23.0 (x86_64-pc-linux-gnu) libcurl/8.23.0 OpenSSL/4.0.3 zlib/1.3.1.zlib-ng brotli/1.2.1 zstd/1.5.7 c-ares/1.34.9 libidn2/2.3.8 libpsl/0.23.3 libssh2/1.11.1 nghttp2/1.70.0 ngtcp2/1.25.0 nghttp3/1.18.0
+Release-Date: 2026-10-14
+[exit=0]
+
+$ ./curl -V | grep -o 'HTTP3'
+HTTP3
+HTTP3
+[exit=0]
+
+
+=== step 3: Caddy holds the UDP/443 socket HTTP/3 needs ===
+$ ss -lun | grep ':443 '
+UNCONN 0      0                  *:443             *:*          
+[exit=0]
+
+
+=== step 4: warm-up (a.test's internal certificate may be issued here; not judged) ===
+$ ./curl --http3-only -sk --resolve a.test:443:127.0.0.1 https://a.test/ -o /dev/null -w 'warmup_http_version=%{http_version} warmup_code=%{http_code}\n' --max-time 25
+warmup_http_version=3 warmup_code=200
+[exit=0]
+
+
+=== step 5: the judged request ===
+$ ./curl --http3-only -sk --resolve a.test:443:127.0.0.1 https://a.test/ -D /tmp/f1.hdr -o /tmp/f1.body -w '%{http_version} %{http_code}\n' --max-time 25 | tee /tmp/f1.w
+3 200
+[exit=0]
+
+$ head -1 /tmp/f1.hdr
+HTTP/3 200 
+[exit=0]
+
+$ grep -i '^x-site:' /tmp/f1.hdr
+x-site: v4
+[exit=0]
+
+$ echo "body=SITE-BODY-v4"
+body=SITE-BODY-v4
+[exit=0]
+
+
+=== step 6: control — same URL restricted to HTTP/2 must report version 2 ===
+  This is what makes %{http_version} a discriminating judgement rather
+  than a constant: the only variable that changes is the protocol flag.
+$ ./curl --http2 -sk --resolve a.test:443:127.0.0.1 https://a.test/ -o /dev/null -w '%{http_version} %{http_code}\n' --max-time 25
+2 200
+[exit=0]
+
+
+=== judgement (judged on %{http_version} only, per the spec's note) ===
+observed http_version=3 http_code=200
+CHECK http_version==3 : PASS
+CHECK http_code==200 : PASS
+CHECK X-Site: v4 : PASS
+note: the status line above is what this curl prints; the judgement uses
+      %{http_version}, never the status-line text.

@@ -1,0 +1,28 @@
+SP5-C4 — xray version >= v1.8.0
+
+Spec:      D:\AiWork\Qoder\my-caddy-v4-SPEC.md §11.4 (SP5-C4)
+Host:      hcss-ecs-94ac (hw-gz), Ubuntu 24.04.4 LTS, x86_64, root
+Xray:      26.10.29 (0afec66, go1.27.3 linux/amd64)
+Caddy:     delivery build, sha256 1a9115339c7a0edefd692d74324bd4906508c40b11bb781e841d5910337b2624
+Verdict:   PASS
+
+What ran: `xray version` on the host, first line pasted. 26.10.29 is a
+calendar version, and the spec's own rule (11.4, SP5-C4) says calendar versions
+satisfy ">= v1.8.0" and must not be string-compared to v1.8.0.
+
+Everything below the rule is the untruncated output of the run named above:
+each `$ ` line is the command that was executed (verbatim, via eval of the
+same string that was printed), followed by its own output and `[exit=N]`.
+grep exits 1 when it matches nothing; where that exit code appears it is the
+"zero matches" result, not an error.
+
+------------------------------------------------------------------------------
+================ SP5-C4 xray version ================
+$ ./xray version
+Xray 26.10.29 (Xray, Penetrates Everything.) 0afec66 (go1.27.3 linux/amd64)
+A unified platform for anti-censorship.
+[exit=0]
+
+$ ./xray version | head -1
+Xray 26.10.29 (Xray, Penetrates Everything.) 0afec66 (go1.27.3 linux/amd64)
+[exit=0]

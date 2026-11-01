@@ -1,0 +1,127 @@
+### date(UTC): 2026-10-31T12:19:29Z
+### host: hcss-ecs-94ac Linux 6.8.0-136-generic x86_64
+### caddy: v2.11.7 => /home/runner/work/my-caddy/my-caddy/.build/caddy-src@(devel)
+### caddy sha256: 1a9115339c7a0edefd692d74324bd4906508c40b11bb781e841d5910337b2624
+### item: SP4B-D5
+### config under test: /tmp/mc/probe/Caddyfile.run
+###   = deploy/Caddyfile with ONLY the two credential placeholders replaced
+###   (diff below). The delivery shape is otherwise untouched.
+### NAIVE_USER=<NAIVE_USER> NAIVE_PASSWORD=<NAIVE_PASSWORD> (throwaway test credentials)
+### backend: python3 backend.py on 127.0.0.1:8080, every method answers
+###   200 + X-Site: v4 + body SITE-BODY-v4, and appends one line to
+###   backend.log per request received. That log is a D5 observable.
+
+### MEASUREMENT NOTE, worth reading before any re-run: D5 runs here on a
+### FRESHLY STARTED caddy, before the site has been requested. reverse_proxy
+### keeps an upstream keep-alive connection to 127.0.0.1:8080, so if D1 (or
+### any site request) runs first, ss -tn shows a caddy-owned ESTAB to :8080
+### that is NOT a proxy tunnel. That happened in the first attempt at this
+### item and read as a deny bypass; restarting caddy and running D5 before
+### any site request showed no such socket. Sample sockets early, or you
+### will read a false positive.
+### The backend log is truncated and the backend restarted just before this
+### item, so the deny probe starts from an empty log.
+
+--- caddy listening, nothing requested yet ---
+LISTEN 0      5          127.0.0.1:8080       0.0.0.0:*          
+LISTEN 0      4096               *:443              *:*          
+
+$ grep -n '^[[:space:]]*acl' /tmp/mc/probe/Caddyfile.run || echo 'no acl directive present'
+no acl directive present
+[exit=0]
+
+$ grep -c '^[[:space:]]*acl' /tmp/mc/probe/Caddyfile.run || true
+0
+[exit=0]
+
+$ wc -l < /tmp/mc/probe/backend.log
+0
+[exit=0]
+
+$ ss -tn | awk 'NR==1 || /:8080/'
+State      Recv-Q Send-Q Local Address:Port     Peer Address:Port Process
+[exit=0]
+
+--- D5a: credentialed CONNECT to the PRIVATE target, then a plaintext
+--- request inside the tunnel; if the deny holds, nothing reaches the backend ---
+
+$ printf 'CONNECT 127.0.0.1:8080 HTTP/1.1\r\nHost: 127.0.0.1:8080\r\nProxy-Authorization: Basic <NAIVE_BASIC_AUTH>\r\n\r\nGET /from-d5 HTTP/1.0\r\nHost: 127.0.0.1:8080\r\n\r\n' | timeout 10 openssl s_client -connect 127.0.0.1:443 -servername a.test -quiet -ign_eof 2>/dev/null > /tmp/mc/probe/d5.out; echo openssl_exit=$?; echo captured_bytes=$(wc -c < /tmp/mc/probe/d5.out)
+openssl_exit=0
+captured_bytes=149
+[exit=0]
+
+$ cat -A /tmp/mc/probe/d5.out
+HTTP/1.1 200 OK^M$
+Alt-Svc: h3=":443"; ma=2592000^M$
+Padding: ^[+!)})^^{<@>@(#~~~~~~~~~~~~~~~~~~~^M$
+Server: Caddy^M$
+Date: Sat, 31 Oct 2026 12:19:29 GMT^M$
+^M$
+[exit=0]
+
+--- D5a judgement inputs ---
+
+$ grep -a -ci x-site /tmp/mc/probe/d5.out || true
+0
+[exit=0]
+
+$ grep -a -ci SITE-BODY-v4 /tmp/mc/probe/d5.out || true
+0
+[exit=0]
+
+$ grep -a -ci from-d5 /tmp/mc/probe/d5.out || true
+0
+[exit=0]
+
+$ wc -l < /tmp/mc/probe/backend.log
+0
+[exit=0]
+
+$ cat -n /tmp/mc/probe/backend.log
+[exit=0]
+
+--- D5b: socket sample while a second denied CONNECT is held open ---
+
+$ ss -tnp | awk 'NR==1 || /:8080/'
+State      Recv-Q Send-Q Local Address:Port     Peer Address:Port Process                             
+[exit=0]
+
+--- D5 control: same probe, test-only acl allow 127.0.0.1/32
+--- this is what makes the negative above attributable to the deny ---
+
+$ diff -u /tmp/mc/probe/Caddyfile.run /tmp/mc/probe/ctl-block.Caddyfile
+--- /tmp/mc/probe/Caddyfile.run	2026-10-31 20:06:26.101115391 +0800
++++ /tmp/mc/probe/ctl-block.Caddyfile	2026-10-31 20:13:21.665332916 +0800
+@@ -79,6 +79,9 @@
+ 		# Recommended, not required. Gives the naive endpoint a decoy
+ 		# behaviour for unauthenticated probes.
+ 		probe_resistance example.com
++		acl {
++			allow 127.0.0.1/32
++		}
+ 		hide_ip
+ 		hide_via
+ 	}
+[exit=1]
+
+$ printf 'CONNECT 127.0.0.1:8080 HTTP/1.1\r\nHost: 127.0.0.1:8080\r\nProxy-Authorization: Basic <NAIVE_BASIC_AUTH>\r\n\r\nGET /from-control HTTP/1.0\r\nHost: 127.0.0.1:8080\r\n\r\n' | timeout 10 openssl s_client -connect 127.0.0.1:443 -servername a.test -quiet -ign_eof 2>/dev/null > /tmp/mc/probe/d5ctl.out; echo openssl_exit=$?; echo captured_bytes=$(wc -c < /tmp/mc/probe/d5ctl.out)
+openssl_exit=0
+captured_bytes=329
+[exit=0]
+
+$ grep -a -o 'HTTP/1\.[01] [0-9][0-9][0-9][^[:cntrl:]]*' /tmp/mc/probe/d5ctl.out | head -3
+HTTP/1.1 200 OK
+HTTP/1.1 200 OK
+[exit=0]
+
+$ grep -a -i -m1 '^X-Site:' /tmp/mc/probe/d5ctl.out
+X-Site: v4
+[exit=0]
+
+$ grep -a -c SITE-BODY-v4 /tmp/mc/probe/d5ctl.out
+1
+[exit=0]
+
+$ cat -n /tmp/mc/probe/backend.log
+     1	GET /from-control
+[exit=0]

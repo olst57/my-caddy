@@ -21,8 +21,9 @@ every record with its host so a reader can tell which host produced which line.
 v0.2.1, so the whole verifier was re-run against the corrected config: as `root`
 on `hw-gz` (Ubuntu 24.04, `Linux 6.8.0-136-generic x86_64`) against the same
 binary, sha256 `1a9115339c7a0edefd692d74324bd4906508c40b11bb781e841d5910337b2624`.
-It prints 19/19 PASS and `VERIFY: PASS`; the log is
-`.gate/release/verify-run.log`. That run was manual too. Before the config was
+Every item in the set that existed then passed and the verifier printed
+`VERIFY: PASS`; the log is `.gate/release/verify-run.log`. That run was manual
+too. Before the config was
 corrected, the same verifier was run on that host against the v0.2.0 config and
 S3-9 FAILed, with every other item PASS: the site's subroute chain read
 `["authentication","forward_proxy"]` and carried no `reverse_proxy`. That is the
@@ -32,8 +33,8 @@ defect ruled in `.gate/release/PM-DECISIONS-3.md` F-1.
 on **ubuntu-latest**, inside a **GitHub Codespace** (Ubuntu 24.04.5,
 `Linux x86_64`), against the artifact from the `build` workflow's **run
 41069346485** — the `caddy-linux-amd64` binary built at commit
-`0a3b22af3c4a467c12dd99eac50ebad7f6174530`. On that host all 19 items pass and
-the verifier prints `VERIFY: PASS`.
+`0a3b22af3c4a467c12dd99eac50ebad7f6174530`. On that host every item in that
+run's set passes and the verifier prints `VERIFY: PASS`.
 
 **The Windows authoring host cannot run the S3 items at all.** The artifact is a
 Linux ELF and the authoring host is Windows/MSYS. It fail-closes at preflight —
@@ -279,8 +280,8 @@ $ CADDY_BIN=dist/caddy-linux-amd64 bash scripts/verify.sh  # expect-fail
 
 On the Linux host the verifier is green. The recorded output below is from
 ubuntu-latest in a GitHub Codespace against the artifact from `build` run
-41069346485; the v0.2.1 run on `hw-gz` produced the same 19 lines and the same
-final line.
+41069346485; the v0.2.1 run on `hw-gz` produced the same lines over that run's
+item set and the same final line.
 
 ```bash
 $ bash scripts/verify.sh | tee .gate/release/verify-run.log
@@ -308,8 +309,86 @@ VERIFY: PASS
 
 This line pipes through `tee` so the log is kept; it is the form recorded in the
 transcript with `exit=0` under the HOST B heading. `.gate/release/verify-run.log`
-holds the **v0.2.1** run's output, i.e. the same 19 PASS lines and
-`VERIFY: PASS`, produced on `hw-gz` after S3-9 changed.
+holds the **v0.2.1** run's output, i.e. one PASS line per item in that run's set
+and `VERIFY: PASS`, produced on `hw-gz` after S3-9 changed.
+
+## The item set, the summary line, and the binary precondition
+
+That recorded output predates the five items v0.4.0-SP7 added, so it is not the
+current item set and must not be read as one. `scripts/verify.sh` now declares
+its own size — `EXPECTED_ITEMS=24`, kept in the same file as the items it counts
+— and the current set is
+
+`S3-1`, `S3-2`, `S3-3`, `S3-4`, `S3-5`, `S3-6`, `S3-7`, `S3-8`, `S3-9`,
+`S3-10`, `S3-11`, `S7-1`, `S7-2`, `S7-3`, `S7-4`, `S7-5`, `S7-6`, `S7-7`,
+`S7-8`, `S7-12`, `S7-13`, `S7-14`, `S7-15`, `S7-18`.
+
+The gap in the `S7-*` numbering is deliberate. `S7-9`, `S7-10`, `S7-11`,
+`S7-16` and `S7-17` are meta-items about the verifier itself: does it exit `0`,
+does it fail closed, does this document cover every ID, is the declared item
+count self-consistent, is the evidence set publishable. A check cannot assert its
+own output from inside itself without the item set growing on every edit, so
+those five are reviewed by re-running the commands in the specification and are
+not emitted by the script.
+
+**The runtime items are not in the script and are not counted.** A2, A3, B\* and
+C\* are observations that need a running Caddy on a real host: a live CONNECT, a
+live `acl` deny, a live `probe_resistance` probe. They cannot be produced
+offline, so they are **not** in `scripts/verify.sh` and therefore do **not**
+count towards `EXPECTED_ITEMS`. They are recorded in "What the runtime actually
+answers" below.
+
+A full run ends with a machine-readable summary line, then the verdict:
+
+```text
+PASS=24 FAIL=0
+VERIFY: PASS
+```
+
+`PASS=<n> FAIL=<m>` is printed only after every item has had its chance to run,
+and the exit status is `0` only when `n` equals `EXPECTED_ITEMS` and `m` is `0`.
+A fail-closed exit — missing `jq`, missing input file, non-executable
+`CADDY_BIN` — prints `VERIFY: FAIL` and a `FATAL:` diagnostic but **no** summary
+line, so a truncated run can never be mistaken for a complete one.
+`VERIFY: PASS|FAIL` is always the last line of output.
+
+**The verifier needs a built Caddy.** `CADDY_BIN` must point at a Caddy binary
+that is both built and executable. It defaults to `dist/caddy-linux-amd64`, and
+`dist/` is gitignored, so a clean clone has no such file: build first, per
+`docs/BUILD.md`, then run the verifier. A missing binary is not a defect in the
+verifier — it is the designed fail-closed path, and it exits `2`.
+
+The credential scan (`S7-12`) matches three patterns, quoted here so a reader can
+re-run them by hand. The first and third use the POSIX bracket expression
+`[[:space:]]` rather than a shorthand whitespace class, which POSIX ERE does not
+define:
+
+```text
+"privateKey"[[:space:]]*:[[:space:]]*"[^<"]
+[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
+(secret|password|passwd|passphrase)[[:space:]]*[:=][[:space:]]*[^<$[:space:]]
+```
+
+The third pattern is matched case-insensitively. A case-sensitive scan would let
+an all-uppercase assignment through untouched.
+
+The five items added in v0.4.0-SP7 post-date the recorded run, so their output
+below is from a later, separate run on the Windows authoring host. That run used
+`CADDY_BIN=/bin/true` only to reach the item layer; the S3 items FAIL in it,
+correctly, because `/bin/true` is not Caddy. The five new items reported:
+
+```text
+ITEM S7-12 PASS
+ITEM S7-13 PASS
+ITEM S7-14 PASS
+ITEM S7-15 PASS
+ITEM S7-18 FAIL
+```
+
+`S7-18` FAILs because this clone carries no `v0.3.0` tag, so there is no baseline
+to diff `deploy/` against. It fails closed rather than skipping, because a
+missing baseline cannot be read as "unchanged". It stays FAIL until the tag
+exists.
 
 ## What the runtime actually answers
 

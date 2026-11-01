@@ -1,0 +1,79 @@
+### date(UTC): 2026-10-31T12:19:32Z
+### host: hcss-ecs-94ac Linux 6.8.0-136-generic x86_64
+### caddy: v2.11.7 => /home/runner/work/my-caddy/my-caddy/.build/caddy-src@(devel)
+### caddy sha256: 1a9115339c7a0edefd692d74324bd4906508c40b11bb781e841d5910337b2624
+### item: SP4B-D1
+### config under test: /tmp/mc/probe/Caddyfile.run
+###   = deploy/Caddyfile with ONLY the two credential placeholders replaced
+###   (diff below). The delivery shape is otherwise untouched.
+### NAIVE_USER=<NAIVE_USER> NAIVE_PASSWORD=<NAIVE_PASSWORD> (throwaway test credentials)
+### backend: python3 backend.py on 127.0.0.1:8080, every method answers
+###   200 + X-Site: v4 + body SITE-BODY-v4, and appends one line to
+###   backend.log per request received. That log is a D5 observable.
+
+--- config diff: the delivery file vs the run copy ---
+
+$ diff -u /tmp/mc/probe/repo/deploy/Caddyfile /tmp/mc/probe/Caddyfile.run
+--- /tmp/mc/probe/repo/deploy/Caddyfile	2026-10-31 20:16:20.479427322 +0800
++++ /tmp/mc/probe/Caddyfile.run	2026-10-31 20:06:26.101115391 +0800
+@@ -75,7 +75,7 @@
+ 		# Proxy-Authorization. Its credentials are encoded as base64(user:pass)
+ 		# rather than bcrypt, and they are a separate list from any site-level
+ 		# credential.
+-		basic_auth <NAIVE_USER> <NAIVE_PASSWORD>
++		basic_auth <NAIVE_USER> <NAIVE_PASSWORD>
+ 		# Recommended, not required. Gives the naive endpoint a decoy
+ 		# behaviour for unauthenticated probes.
+ 		probe_resistance example.com
+[exit=1]
+
+$ ss -ltn | grep -E ':8080|:443 '
+LISTEN 0      5          127.0.0.1:8080       0.0.0.0:*          
+LISTEN 0      4096               *:443              *:*          
+[exit=0]
+
+--- D1: plain GET to the site through the delivery config ---
+
+$ curl -sk --resolve a.test:443:127.0.0.1 https://a.test/ -D /tmp/mc/probe/d1.hdr -o /tmp/mc/probe/d1.body; echo curl_exit=$?
+curl_exit=0
+[exit=0]
+
+$ cat /tmp/mc/probe/d1.hdr
+HTTP/2 200 
+alt-svc: h3=":443"; ma=2592000
+content-type: text/plain
+date: Sat, 31 Oct 2026 12:19:32 GMT
+server: BaseHTTP/0.6 Python/3.12.3
+via: 1.1 Caddy
+x-site: v4
+content-length: 13
+
+[exit=0]
+
+$ cat /tmp/mc/probe/d1.body; echo
+SITE-BODY-v4
+
+[exit=0]
+
+--- D1 judgement inputs ---
+
+$ head -1 /tmp/mc/probe/d1.hdr
+HTTP/2 200 
+[exit=0]
+
+$ grep -ci '^x-site: v4' /tmp/mc/probe/d1.hdr
+1
+[exit=0]
+
+$ grep -a -c SITE-BODY-v4 /tmp/mc/probe/d1.body
+1
+[exit=0]
+
+$ grep -ci -e '^www-authenticate:' -e '^proxy-authenticate:' /tmp/mc/probe/d1.hdr || true
+0
+[exit=0]
+
+$ cat -n /tmp/mc/probe/backend.log
+     1	GET /from-control
+     2	GET /
+[exit=0]

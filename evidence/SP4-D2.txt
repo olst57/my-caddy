@@ -1,0 +1,81 @@
+### date(UTC): 2026-10-31T11:56:49Z
+### host: hcss-ecs-94ac Linux 6.8.0-136-generic x86_64
+### caddy: v2.11.7 => /home/runner/work/my-caddy/my-caddy/.build/caddy-src@(devel)
+### caddy sha256: 1a9115339c7a0edefd692d74324bd4906508c40b11bb781e841d5910337b2624
+### SITE_DOMAIN=a.test WEB_PORT=18080 TARGET_HOST=www.microsoft.com
+### NAIVE_USER=<NAIVE_USER> NAIVE_PASS=<NAIVE_PASSWORD> (throwaway test credentials)
+
+=== overlay B (no site-level basic_auth) ===
+--- /tmp/mc/Caddyfile.b ---
+{
+	order forward_proxy before reverse_proxy
+}
+
+# Sprint 4 overlay B: delivery shape MINUS the site-level basic_auth block.
+# Same listener_wrappers deviation as overlay A (see Caddyfile.a).
+:443, a.test {
+	tls internal
+
+	forward_proxy {
+		basic_auth <NAIVE_USER> <NAIVE_PASSWORD>
+		probe_resistance
+		hide_ip
+		hide_via
+	}
+
+	reverse_proxy 127.0.0.1:18080
+}
+
+--- target resolution ---
+
+$ getent ahosts www.microsoft.com | head -3
+<PUBLIC_IP-2>    STREAM <HOST-1>
+<PUBLIC_IP-2>    DGRAM  
+<PUBLIC_IP-2>    RAW    
+[exit=0]
+
+caddy run pid=56372 config=/tmp/mc/Caddyfile.b listening on :443 after ~250ms
+
+--- ssh -v style check: 443 owned by caddy ---
+LISTEN 0      4096               *:443              *:*    users:(("caddy-linux-amd",pid=56372,fd=7))             
+
+--- credential string (base64 user:pass) ---
+
+$ printf '%s:%s' '<NAIVE_USER>' '<NAIVE_PASSWORD>' | base64 -w0; echo
+<NAIVE_BASIC_AUTH>
+[exit=0]
+
+--- SP4-D2 command (verbatim shape from spec 10.4) ---
+
+$ printf 'CONNECT www.microsoft.com:443 HTTP/1.1\r\nHost: www.microsoft.com:443\r\nProxy-Authorization: Basic <NAIVE_BASIC_AUTH>\r\n\r\n' | timeout 15 openssl s_client -connect 127.0.0.1:443 -servername a.test -quiet -ign_eof 2>/dev/null | head -3
+HTTP/1.1 200 OK
+Alt-Svc: h3=":443"; ma=2592000
+Padding: {!<?(+!{}$[#$[(^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[exit=0]
+
+--- same, full response without head (re-run, capture all) ---
+
+$ printf 'CONNECT www.microsoft.com:443 HTTP/1.1\r\nHost: www.microsoft.com:443\r\nProxy-Authorization: Basic <NAIVE_BASIC_AUTH>\r\n\r\n' | timeout 10 openssl s_client -connect 127.0.0.1:443 -servername a.test -quiet -ign_eof 2>/dev/null > /tmp/d2.full; echo "bytes=$(wc -c < /tmp/d2.full)"; cat -A /tmp/d2.full | head -5
+bytes=166
+HTTP/1.1 200 OK^M$
+Alt-Svc: h3=":443"; ma=2592000^M$
+Padding: <+@}@`<{`}^?(?[<~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^M$
+Server: Caddy^M$
+Date: Sat, 31 Oct 2026 11:57:04 GMT^M$
+[exit=0]
+caddy stopped; :443 is free
+
+--- caddy log, last 10 lines ---
+{"level":"info","ts":1793447809.728648,"logger":"tls","msg":"finished cleaning storage units"}
+{"level":"info","ts":1793447809.734684,"logger":"pki.ca.local","msg":"root certificate is already trusted by system","path":"storage:pki/authorities/local/root.crt"}
+{"level":"info","ts":1793447809.734799,"msg":"autosaved config (load with --resume flag)","file":"/root/.config/caddy/autosave.json"}
+{"level":"info","ts":1793447809.734805,"msg":"serving initial configuration"}
+{"level":"info","ts":1793447834.9777539,"msg":"shutting down apps, then terminating","signal":"SIGTERM"}
+{"level":"warn","ts":1793447834.977804,"msg":"exiting; byeee!! 👋","signal":"SIGTERM"}
+{"level":"info","ts":1793447834.9778485,"logger":"http","msg":"servers shutting down with eternal grace period"}
+{"level":"info","ts":1793447834.9780393,"logger":"tls.cache.maintenance","msg":"stopped background certificate maintenance","cache":"0x29b8a407700"}
+{"level":"info","ts":1793447834.9781077,"logger":"admin","msg":"stopped previous server","address":"localhost:2019"}
+{"level":"info","ts":1793447834.978116,"msg":"shutdown complete","signal":"SIGTERM","exit_code":0}
+
+--- final listener state ---
+no :443 listener

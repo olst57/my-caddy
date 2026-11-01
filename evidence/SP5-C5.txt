@@ -1,0 +1,60 @@
+SP5-C5 — acceptProxyProtocol appears exactly once, in streamSettings.sockopt
+
+Spec:      D:\AiWork\Qoder\my-caddy-v4-SPEC.md §11.4 (SP5-C5)
+Host:      hcss-ecs-94ac (hw-gz), Ubuntu 24.04.4 LTS, x86_64, root
+Xray:      26.10.29 (0afec66, go1.27.3 linux/amd64)
+Caddy:     delivery build, sha256 1a9115339c7a0edefd692d74324bd4906508c40b11bb781e841d5910337b2624
+Verdict:   PASS
+
+What ran: the four checks the spec names, against the shipped file. The
+sha256 of the file is printed first so the reader can tie the evidence to the
+exact bytes; it equals the sha256 of `deploy/xray/config.json` in the repo.
+The spec's path is `xray/config.json` (its notional repo-root layout); on the
+host the staged copy is /tmp/mc/repo/deploy/xray/config.json, which is the
+`deploy/` directory of this repo, so the relative path inside it is the same.
+
+The last command widens the search to the whole `deploy/` tree: two hits, the
+config line and one Caddyfile *comment*. A comment is not a second effective
+setting; the spec's `grep -c` against xray/config.json is 1 as required.
+
+Everything below the rule is the untruncated output of the run named above:
+each `$ ` line is the command that was executed (verbatim, via eval of the
+same string that was printed), followed by its own output and `[exit=N]`.
+grep exits 1 when it matches nothing; where that exit code appears it is the
+"zero matches" result, not an error.
+
+------------------------------------------------------------------------------
+================ SP5-C5 acceptProxyProtocol appears exactly once ================
+$ sha256sum xray/config.json
+289b9bbf2348d6d42edbb9888546cd844cab887976400622ccce02a068c942a3  xray/config.json
+[exit=0]
+
+$ grep -c 'acceptProxyProtocol' xray/config.json
+1
+[exit=0]
+
+$ grep -n 'acceptProxyProtocol' xray/config.json
+34:          "acceptProxyProtocol": true
+[exit=0]
+
+$ jq -e '.inbounds[0].streamSettings.sockopt.acceptProxyProtocol == true' xray/config.json
+true
+[exit=0]
+
+$ jq -e '.inbounds[0].streamSettings.tcpSettings.acceptProxyProtocol == null' xray/config.json
+true
+[exit=0]
+
+$ jq -c '.inbounds[0].streamSettings.sockopt' xray/config.json
+{"acceptProxyProtocol":true}
+[exit=0]
+
+$ jq -c '.inbounds[0].streamSettings.tcpSettings' xray/config.json
+null
+[exit=0]
+
+--- every place the substring occurs in the whole deploy tree ---
+$ grep -rn 'acceptProxyProtocol' /tmp/mc/repo/deploy/
+/tmp/mc/repo/deploy/xray/config.json:34:          "acceptProxyProtocol": true
+/tmp/mc/repo/deploy/Caddyfile:36:						# streamSettings.sockopt.acceptProxyProtocol in
+[exit=0]

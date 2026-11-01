@@ -1,0 +1,99 @@
+### date(UTC): 2026-10-31T11:49:19Z
+### host: hcss-ecs-94ac Linux 6.8.0-136-generic x86_64
+### caddy: v2.11.7 => /home/runner/work/my-caddy/my-caddy/.build/caddy-src@(devel)
+### caddy sha256: 1a9115339c7a0edefd692d74324bd4906508c40b11bb781e841d5910337b2624
+### SITE_DOMAIN=a.test WEB_PORT=18080 TARGET_HOST=www.microsoft.com
+### NAIVE_USER=<NAIVE_USER> NAIVE_PASS=<NAIVE_PASSWORD> (throwaway test credentials)
+
+--- credential consistency (throwaway test creds; hashes are the check of record) ---
+
+$ printf '%s' '<NAIVE_PASSWORD>' | sha256sum
+<PASSWORD_SHA256>
+[exit=0]
+
+$ grep -h 'basic_auth <NAIVE_USER> <NAIVE_PASSWORD> | awk '{print $3}' | while read -r p; do printf '%s' "$p" | sha256sum; done
+<PASSWORD_SHA256>
+[exit=0]
+
+caddy run pid=54722 config=/tmp/mc/Caddyfile.b listening on :443 after ~250ms
+
+--- target resolution ---
+
+$ getent ahosts www.microsoft.com | head -1
+<PUBLIC_IP-2>    STREAM <HOST-1>
+[exit=0]
+
+--- SP4-D4 sequence (verbatim shape from spec 10.4) ---
+START=2026-10-31T11:49:19Z
+client pid=54743
+CHECK=2026-10-31T11:50:49Z
+DELTA_SECONDS=90
+ALIVE=1
+grep -ci 'eof|closed|errno' /tmp/d4.out
+0
+[grep exit=1]
+
+--- tunnel as seen by the kernel at the check point ---
+
+$ ss -tnp | grep -E ":443\b" | head -10
+ESTAB 0      0             <PUBLIC_IP-1>:38864       <PUBLIC_IP-2>:443   users:(("caddy-linux-amd",pid=54722,fd=11))
+ESTAB 0      0               127.0.0.1:34562          127.0.0.1:443   users:(("openssl",pid=54748,fd=3))         
+ESTAB 0      0      [::ffff:127.0.0.1]:443   [::ffff:127.0.0.1]:34562 users:(("caddy-linux-amd",pid=54722,fd=10))
+[exit=0]
+
+--- /tmp/d4.out at the check point (first 8 lines) ---
+
+$ head -8 /tmp/d4.out
+depth=2 CN = Caddy Local Authority - 2026 ECC Root
+verify return:1
+depth=1 CN = Caddy Local Authority - ECC Intermediate
+verify return:1
+depth=0 
+verify return:1
+HTTP/1.1 200 OK
+Alt-Svc: h3=":443"; ma=2592000
+[exit=0]
+
+$ wc -c /tmp/d4.out
+324 /tmp/d4.out
+[exit=0]
+
+--- wait for the harness pipeline to finish (sleep 95 + timeout 100) ---
+client pipeline finished; still alive? no
+
+--- /tmp/d4.out after the pipeline finished ---
+
+$ cat -A /tmp/d4.out | head -10
+depth=2 CN = Caddy Local Authority - 2026 ECC Root$
+verify return:1$
+depth=1 CN = Caddy Local Authority - ECC Intermediate$
+verify return:1$
+depth=0 $
+verify return:1$
+HTTP/1.1 200 OK^M$
+Alt-Svc: h3=":443"; ma=2592000^M$
+Padding: (`(@]`>!`]`(!@}<~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^M$
+Server: Caddy^M$
+[exit=0]
+
+$ grep -ci "eof\|closed\|errno" /tmp/d4.out || true
+0
+[exit=0]
+caddy stopped; :443 is free
+
+--- caddy log, last 12 lines ---
+{"level":"info","ts":1793447359.2898877,"logger":"http.log","msg":"server running","name":"srv0","protocols":["h1","h2","h3"]}
+{"level":"warn","ts":1793447359.2899315,"logger":"http","msg":"HTTP/2 skipped because it requires TLS","network":"tcp","addr":":80"}
+{"level":"warn","ts":1793447359.289936,"logger":"http","msg":"HTTP/3 skipped because it requires TLS","network":"tcp","addr":":80"}
+{"level":"info","ts":1793447359.2899384,"logger":"http.log","msg":"server running","name":"remaining_auto_https_redirects","protocols":["h1","h2","h3"]}
+{"level":"info","ts":1793447359.2900317,"msg":"autosaved config (load with --resume flag)","file":"/root/.config/caddy/autosave.json"}
+{"level":"info","ts":1793447359.290037,"msg":"serving initial configuration"}
+{"level":"info","ts":1793447459.7447174,"msg":"shutting down apps, then terminating","signal":"SIGTERM"}
+{"level":"warn","ts":1793447459.744754,"msg":"exiting; byeee!! 👋","signal":"SIGTERM"}
+{"level":"info","ts":1793447459.7448013,"logger":"http","msg":"servers shutting down with eternal grace period"}
+{"level":"info","ts":1793447459.7449896,"logger":"tls.cache.maintenance","msg":"stopped background certificate maintenance","cache":"0x23fde63ff680"}
+{"level":"info","ts":1793447459.7450414,"logger":"admin","msg":"stopped previous server","address":"localhost:2019"}
+{"level":"info","ts":1793447459.745061,"msg":"shutdown complete","signal":"SIGTERM","exit_code":0}
+
+--- final listener state ---
+no :443 listener

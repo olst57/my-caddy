@@ -1,0 +1,110 @@
+SP6-F4 — B matches layer4 but the upstream is down: no fallback
+
+Spec:      D:\AiWork\Qoder\my-caddy-v4-SPEC.md §12.4 (SP6-F4)
+Host:      hcss-ecs-94ac (hw-gz), Ubuntu 24.04.4 LTS, x86_64, root
+Verdict:   PASS
+
+What ran: the stack was started, then xray was stopped so that nothing listens
+on 19098. The layer4 matcher was left claiming b.test, and the request was made
+with the same Caddy build and config as the other items.
+
+Results, each against its own observable:
+  1. `ss -ltn | grep -c ":19098 "` = 0, with Caddy still listening on 443. The
+     precondition holds, and the output is pasted.
+  2. `curl` exits 35 and reports `TLS connect error: ... unexpected eof while
+     reading`. That is a non-zero exit with no HTTP response — the shape the
+     spec asks for. The -D header file is 0 bytes and curl writes no body.
+  3. No `404` status line (the header file has no status line at all), and no
+     `X-Site` / `Proxy-Authenticate` header. Caddy's own log names the cause:
+     `caddy.listeners.layer4 ... "error":"dial tcp 127.0.0.1:19098: connect:
+     connection refused"` — matched, dialed, failed, and did not fall back to
+     the tls wrapper.
+
+Because the failure is a closed connection rather than a 404, this item passes
+on the strict reading: the connection did not degrade into B's local answer.
+
+### host: hcss-ecs-94ac  date: 2026-10-31T14:00:55Z  kernel: 6.8.0-136-generic
+
+=== stack under test ===
+    instances: caddy=1 xray=1 backend=1
+    LISTEN 0      5          127.0.0.1:8080       0.0.0.0:*          
+    LISTEN 0      4096       127.0.0.1:2019       0.0.0.0:*          
+    LISTEN 0      4096       127.0.0.1:19098      0.0.0.0:*          
+    LISTEN 0      4096               *:443              *:*          
+
+=== precondition: xray stopped, so the layer4 upstream has no listener ===
+$ bash /tmp/mc/s6/stop-xray.sh
+xray stopped; listeners on 19098: 0
+[exit=0]
+
+$ ss -ltn | grep -c ":19098 "
+0
+[exit=1]
+
+  grep exits 1 on zero matches: that is the precondition being satisfied.
+$ ss -ltn | grep -E ':(443|19098) '
+LISTEN 0      4096               *:443              *:*          
+[exit=0]
+
+  Caddy is still listening on 443; only 19098 is gone.
+
+--- the layer4 matcher still claims b.test ---
+$ grep -n '@reality tls sni' /tmp/mc/s6/Caddyfile
+17:				@reality tls sni b.test
+[exit=0]
+
+
+=== request to b.test with the upstream dead ===
+$ curl -sk --resolve b.test:443:127.0.0.1 https://b.test/ -D /tmp/f4.hdr -o /tmp/f4.body
+CURL_EXIT=35
+
+$ [ -f /tmp/f4.hdr ] && head -5 /tmp/f4.hdr || echo 'NO_HEADER_FILE (no HTTP response was written)'
+[exit=0]
+
+$ [ -f /tmp/f4.hdr ] && wc -c < /tmp/f4.hdr || echo 'NO_HEADER_FILE'
+0
+[exit=0]
+
+$ [ -f /tmp/f4.hdr ] && grep -i -e '^x-site:' -e '^proxy-authenticate:' /tmp/f4.hdr || echo 'NO_HEADER_FILE'
+NO_HEADER_FILE
+[exit=0]
+
+$ [ -f /tmp/f4.hdr ] && grep -cE '^HTTP/[0-9.]+ 404' /tmp/f4.hdr || true
+0
+[exit=0]
+
+  a nonzero count here would mean layer4 did not match, or matched and
+  wrongly fell back to the tls wrapper and B's 404. That is a FAIL.
+
+$ [ -f /tmp/f4.body ] && wc -c < /tmp/f4.body || echo 'NO_BODY_FILE'
+NO_BODY_FILE
+[exit=0]
+
+
+--- the same request with -v, to name the failure mode in words ---
+$ ./curl -vk --resolve b.test:443:127.0.0.1 https://b.test/ -o /dev/null 2>&1 | grep -iE 'connected|SSL|error|reset|closed|empty|TLS alert' | head -8
+* SSL Trust: peer verification disabled
+* TLSv1.3 (OUT), TLS alert, decode error (562):
+* TLS connect error: error:0A000126:SSL routines::unexpected eof while reading
+curl: (35) TLS connect error: error:0A000126:SSL routines::unexpected eof while reading
+[exit=0]
+
+
+=== Caddy's own account of the failed dial ===
+$ tail -6 /tmp/mc/s6/caddy-console.log
+{"level":"info","ts":1793455257.4769855,"logger":"tls","msg":"finished cleaning storage units"}
+{"level":"info","ts":1793455257.4834845,"logger":"pki.ca.local","msg":"root certificate is already trusted by system","path":"storage:pki/authorities/local/root.crt"}
+{"level":"info","ts":1793455257.4836078,"msg":"autosaved config (load with --resume flag)","file":"/root/.config/caddy/autosave.json"}
+{"level":"info","ts":1793455257.4836144,"msg":"serving initial configuration"}
+{"level":"error","ts":1793455261.0104413,"logger":"caddy.listeners.layer4","msg":"handling connection","error":"dial tcp 127.0.0.1:19098: connect: connection refused"}
+{"level":"error","ts":1793455261.0245783,"logger":"caddy.listeners.layer4","msg":"handling connection","error":"dial tcp 127.0.0.1:19098: connect: connection refused"}
+[exit=0]
+
+
+=== judgement ===
+observed hdr_bytes=0 404_status_lines=0 site_or_proxy_headers=0
+  curl's exit code and stderr are in the transcript above; a nonzero
+  CURL_EXIT, or Empty reply / Connection reset / Recv failure, is the
+  expected shape.
+CHECK no 404 status line : PASS
+CHECK no X-Site / Proxy-Authenticate : PASS

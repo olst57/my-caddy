@@ -1,0 +1,165 @@
+SP6-F2 — naive's H3 path is not broken
+
+Spec:      D:\AiWork\Qoder\my-caddy-v4-SPEC.md §12.4 (SP6-F2)
+Host:      hcss-ecs-94ac (hw-gz), Ubuntu 24.04.4 LTS, x86_64, root
+Verdict:   PASS (4/4 attempts)
+
+What ran: naive 154.0.8037.49 from klzgrad/naiveproxy, configured with a
+`quic://user:<password>@a.test:443` proxy URL — not `https://`, which would
+silently use H2 and void the test — plus `host-resolver-rules` mapping a.test
+to 127.0.0.1 so no /etc/hosts edit was needed. Each attempt starts a fresh
+Caddy and a fresh naive, captures `udp port 443`, and makes one request through
+the SOCKS listener to https://www.apple.com
+
+Observed, all four attempts: inner request 200, 154-183 QUIC packets, port 443
+in both directions, naive logging "Proxying via QUIC a.test:443" and a
+negotiated padding type. A downgrade to HTTPS/TCP would have produced 200 with
+zero QUIC packets, which is explicitly not a pass here; no attempt shows that.
+
+Deviations:
+  1. tshark is not installed on this host, so `tshark -Y 'quic'` is replaced by
+     `tcpdump -w` plus an explicit QUIC header parser (quic_scan.py): a packet
+     counts as QUIC if it carries a long header with a 32-bit version, or is a
+     short-header packet on a flow that already carried one. The parser's output
+     is pasted in full, so the classification is checkable rather than asserted.
+  2. The inner target is www.apple.com. The spec leaves <TARGET> open; apple
+     answers in 0.05 s from this host against 13.7 s for www.microsoft.com.
+  3. Run history, disclosed: an earlier execution of this item, before a harness
+     fix, failed 1 of 4 attempts with a 30 s preamble timeout. The cause was two
+     Caddy processes both bound to udp/443 (SO_REUSEPORT), so QUIC datagrams
+     were split between processes that did not share connection state. That is a
+     defect in the harness, not in the delivery config; start.sh now refuses to
+     return until exactly one instance of Caddy, xray and the backend is running
+     (`instances: caddy=1 xray=1 backend=1` in every transcript). The run above
+     is the re-measurement on the fixed harness.
+
+### host: hcss-ecs-94ac  date: 2026-10-31T14:05:48Z  kernel: 6.8.0-136-generic
+
+=== stack under test ===
+    instances: caddy=1 xray=1 backend=1
+    LISTEN 0      5          127.0.0.1:8080       0.0.0.0:*          
+    LISTEN 0      4096       127.0.0.1:2019       0.0.0.0:*          
+    LISTEN 0      4096       127.0.0.1:19098      0.0.0.0:*          
+    LISTEN 0      4096               *:443              *:*          
+
+=== naive client config (proxy URL is quic://, not https://) ===
+$ cat /tmp/mc/s6/naive-client.json
+{
+  "listen": "socks://127.0.0.1:10801",
+  "proxy": "quic://user:<NAIVE_PASSWORD>@a.test:443",
+  "host-resolver-rules": "MAP a.test 127.0.0.1",
+  "log": "/tmp/mc/s6/naive.log"
+}
+[exit=0]
+
+$ ./naive --version
+naive 154.0.8037.49
+[exit=0]
+
+
+=== packet-capture tooling on this host ===
+$ command -v tshark
+[exit=1]
+
+  tshark is absent (Sprint 5 note confirmed). The spec's 'tshark -Y quic'
+  filter is replaced by tcpdump plus an explicit QUIC header parser; the
+  substitution is recorded as a deviation and the parser output is pasted.
+
+########## attempt 1 of 4: fresh Caddy, fresh naive ##########
+    LISTEN 0      512        127.0.0.1:10801      0.0.0.0:*          
+$ curl -s --socks5-hostname 127.0.0.1:10801 -o /dev/null -w '%{http_code} %{time_total}' --max-time 40 https://www.apple.com/
+200 0.171171
+--- naive's account ---
+    [1031/220611.338793:INFO:net/tools/naive/naive_proxy_bin.cc:236] Proxying via QUIC a.test:443
+    [1031/220613.591282:INFO:net/tools/naive/preamble_getter.cc:236] Preamble https://a.test/
+    [1031/220613.597603:INFO:net/tools/naive/naive_connection.cc:286] Connection 0 to www.apple.com:443 via QUIC a.test:443
+    [1031/220613.598364:INFO:net/tools/naive/naive_proxy_delegate.cc:171] quic://a.test:443 negotiated padding type: Variant1
+    [1031/220613.762736:INFO:net/tools/naive/naive_proxy.cc:288] Connection 0 closed: OK
+--- QUIC summary for this attempt ---
+    QUIC_PACKETS=183
+    PORT_PAIRS=[(443, 47180), (47180, 443)]
+    PORT_443_BOTH_DIRECTIONS=True
+--- first QUIC packets, ports visible ---
+    pkt1   127.0.0.1:47180 -> 127.0.0.1:443   len=1250  quic=Initial  version=0x00000001 head=cd00000001082a667551fd56941d000044d0e4b8f244e6f8
+    pkt2   127.0.0.1:47180 -> 127.0.0.1:443   len=1250  quic=Initial  version=0x00000001 head=c500000001082a667551fd56941d000044d093561eeeb9db
+    pkt3   127.0.0.1:443   -> 127.0.0.1:47180 len=1200  quic=Initial  version=0x00000001 head=cb000000010004584031e30044a2f4f0d86658e1a8bd8ef7
+    pkt4   127.0.0.1:443   -> 127.0.0.1:47180 len=1200  quic=Initial  version=0x00000001 head=ca000000010004584031e30040296683916a723a98992632
+
+########## attempt 2 of 4: fresh Caddy, fresh naive ##########
+    LISTEN 0      512        127.0.0.1:10801      0.0.0.0:*          
+$ curl -s --socks5-hostname 127.0.0.1:10801 -o /dev/null -w '%{http_code} %{time_total}' --max-time 40 https://www.apple.com/
+200 0.077705
+--- naive's account ---
+    [1031/220717.225055:INFO:net/tools/naive/naive_proxy_bin.cc:236] Proxying via QUIC a.test:443
+    [1031/220719.475803:INFO:net/tools/naive/preamble_getter.cc:236] Preamble https://a.test/
+    [1031/220719.480856:INFO:net/tools/naive/naive_connection.cc:286] Connection 0 to www.apple.com:443 via QUIC a.test:443
+    [1031/220719.481737:INFO:net/tools/naive/naive_proxy_delegate.cc:171] quic://a.test:443 negotiated padding type: Variant1
+    [1031/220719.553688:INFO:net/tools/naive/naive_proxy.cc:288] Connection 0 closed: OK
+--- QUIC summary for this attempt ---
+    QUIC_PACKETS=174
+    PORT_PAIRS=[(443, 45169), (45169, 443)]
+    PORT_443_BOTH_DIRECTIONS=True
+--- first QUIC packets, ports visible ---
+    pkt1   127.0.0.1:45169 -> 127.0.0.1:443   len=1250  quic=Initial  version=0x00000001 head=ca00000001080064f2a651bb4ebd000044d0377fa2cf95d6
+    pkt2   127.0.0.1:45169 -> 127.0.0.1:443   len=1250  quic=Initial  version=0x00000001 head=c100000001080064f2a651bb4ebd000044d092b3647ff1b7
+    pkt3   127.0.0.1:443   -> 127.0.0.1:45169 len=1200  quic=Initial  version=0x00000001 head=c4000000010004381418d10044a28b9f8fb1f7c305cb4e3c
+    pkt4   127.0.0.1:443   -> 127.0.0.1:45169 len=1200  quic=Initial  version=0x00000001 head=cd000000010004381418d1004029fa1efedfb944fd3dac3c
+
+########## attempt 3 of 4: fresh Caddy, fresh naive ##########
+    LISTEN 0      512        127.0.0.1:10801      0.0.0.0:*          
+$ curl -s --socks5-hostname 127.0.0.1:10801 -o /dev/null -w '%{http_code} %{time_total}' --max-time 40 https://www.apple.com/
+200 0.074410
+--- naive's account ---
+    [1031/220823.131302:INFO:net/tools/naive/naive_proxy_bin.cc:236] Proxying via QUIC a.test:443
+    [1031/220825.382914:INFO:net/tools/naive/preamble_getter.cc:236] Preamble https://a.test/
+    [1031/220825.387626:INFO:net/tools/naive/naive_connection.cc:286] Connection 0 to www.apple.com:443 via QUIC a.test:443
+    [1031/220825.388437:INFO:net/tools/naive/naive_proxy_delegate.cc:171] quic://a.test:443 negotiated padding type: Variant1
+    [1031/220825.457503:INFO:net/tools/naive/naive_proxy.cc:288] Connection 0 closed: OK
+--- QUIC summary for this attempt ---
+    QUIC_PACKETS=167
+    PORT_PAIRS=[(443, 38417), (38417, 443)]
+    PORT_443_BOTH_DIRECTIONS=True
+--- first QUIC packets, ports visible ---
+    pkt1   127.0.0.1:38417 -> 127.0.0.1:443   len=1250  quic=Initial  version=0x00000001 head=c700000001081b246e05dd9decef000044d0711776f2407e
+    pkt2   127.0.0.1:38417 -> 127.0.0.1:443   len=1250  quic=Initial  version=0x00000001 head=c300000001081b246e05dd9decef000044d0693f3538ea5a
+    pkt3   127.0.0.1:443   -> 127.0.0.1:38417 len=1200  quic=Initial  version=0x00000001 head=c6000000010004e96962230044a27118d73195c4dacf113e
+    pkt4   127.0.0.1:443   -> 127.0.0.1:38417 len=1200  quic=Initial  version=0x00000001 head=ce000000010004e96962230040298e1547adf960223d6803
+
+########## attempt 4 of 4: fresh Caddy, fresh naive ##########
+    LISTEN 0      512        127.0.0.1:10801      0.0.0.0:*          
+$ curl -s --socks5-hostname 127.0.0.1:10801 -o /dev/null -w '%{http_code} %{time_total}' --max-time 40 https://www.apple.com/
+200 0.054764
+--- naive's account ---
+    [1031/220929.040395:INFO:net/tools/naive/naive_proxy_bin.cc:236] Proxying via QUIC a.test:443
+    [1031/220931.291812:INFO:net/tools/naive/preamble_getter.cc:236] Preamble https://a.test/
+    [1031/220931.296476:INFO:net/tools/naive/naive_connection.cc:286] Connection 0 to www.apple.com:443 via QUIC a.test:443
+    [1031/220931.297440:INFO:net/tools/naive/naive_proxy_delegate.cc:171] quic://a.test:443 negotiated padding type: Variant1
+    [1031/220931.346755:INFO:net/tools/naive/naive_proxy.cc:288] Connection 0 closed: OK
+--- QUIC summary for this attempt ---
+    QUIC_PACKETS=154
+    PORT_PAIRS=[(443, 59245), (59245, 443)]
+    PORT_443_BOTH_DIRECTIONS=True
+--- first QUIC packets, ports visible ---
+    pkt1   127.0.0.1:59245 -> 127.0.0.1:443   len=1250  quic=Initial  version=0x00000001 head=cd0000000108b86167b0d78d18c8000044d0cef675c850b9
+    pkt2   127.0.0.1:59245 -> 127.0.0.1:443   len=1250  quic=Initial  version=0x00000001 head=ca0000000108b86167b0d78d18c8000044d03b574ff6dd47
+    pkt3   127.0.0.1:443   -> 127.0.0.1:59245 len=1200  quic=Initial  version=0x00000001 head=cb000000010004840bba140044a231b520bb8ef949d0221e
+    pkt4   127.0.0.1:443   -> 127.0.0.1:59245 len=1200  quic=Initial  version=0x00000001 head=c3000000010004840bba140040296303a13bc0b03a6b3d21
+
+=== attempt table ===
+attempt  http_code time_s     quic_pkts preamble_stall
+1        200      0.171171   183      0       
+2        200      0.077705   174      0       
+3        200      0.074410   167      0       
+4        200      0.054764   154      0       
+
+=== judgement ===
+attempts=4  completed_200=4  attempts_with_quic=4
+Each attempt is judged on the spec's two observables: the inner request
+completing 200, and QUIC packets carrying 443 in both directions. An
+attempt that does not complete is a finding, not noise: its failure mode
+is in the attempt table and in naive's log above. A fallback to HTTPS/TCP
+would show as http_code 200 with zero QUIC packets — that combination is
+explicitly not a pass.
+CHECK at least one attempt completes 200 : PASS
+CHECK QUIC packets observed : PASS
+CHECK naive reports QUIC (not https://) : PASS

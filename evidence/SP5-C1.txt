@@ -1,0 +1,148 @@
+SP5-C1 — B's bytes are a raw TLS ClientHello; Caddy did not decrypt
+
+Spec:      D:\AiWork\Qoder\my-caddy-v4-SPEC.md §11.4 (SP5-C1)
+Host:      hcss-ecs-94ac (hw-gz), Ubuntu 24.04.4 LTS, x86_64, root
+Xray:      26.10.29 (0afec66, go1.27.3 linux/amd64)
+Caddy:     delivery build, sha256 1a9115339c7a0edefd692d74324bd4906508c40b11bb781e841d5910337b2624
+Verdict:   PASS (deviation D-1: single-packet framing not met, stream-level evidence used)
+
+What ran: tcpdump on lo (tcp port 19098) while `openssl s_client -connect
+127.0.0.1:443 -servername b.test` ran. The three required observations are:
+1. the first bytes on the connection towards 19098 are the PROXY v2 signature
+   `0d0a0d0a000d0a515549540a`, then `21` (version 2, PROXY), then `11` (TCP over
+   IPv4), and the TLS ClientHello record `16 03 01` begins immediately after the
+   28-byte header;
+2. the certificate presented on that handshake is the REALITY dest's, and
+   contains neither "Caddy Local Authority" nor "CN = b.test";
+3. the Caddy access log holds zero records for the SNI, while the same log does
+   record a control SNI that Caddy terminates locally.
+
+Deviation D-1 (scoring relevant): the spec's wording asks for one packet that
+carries the header and `16 03 01` together. Caddy writes the 28-byte header and
+the ClientHello as two TCP segments; they are adjacent in the stream (seq 0:28
+then 29:337, i.e. no gap). Condition 1 is therefore evidenced at stream level,
+not at single-packet level. Both the segments and the reassembled prefix are
+printed below so the distinction is checkable rather than asserted.
+
+Deviation D-5 (dest choice): `openssl x509` through REALITY against dest
+`www.apple.com:443` returned `CN = <HOST-3>` / issuer Sectigo on this
+host, i.e. the cert did not correspond to the dest. `www.microsoft.com:443` was
+used instead and matches its own direct certificate exactly (printed below).
+
+Everything below the rule is the untruncated output of the run named above:
+each `$ ` line is the command that was executed (verbatim, via eval of the
+same string that was printed), followed by its own output and `[exit=N]`.
+grep exits 1 when it matches nothing; where that exit code appears it is the
+"zero matches" result, not an error.
+
+------------------------------------------------------------------------------
+### host: hcss-ecs-94ac  date: 2026-10-31T13:29:11Z
+
+$ ( timeout 20 tcpdump -i lo -s 0 -w /tmp/mc/s5/c1.pcap "tcp port $XRAY_PORT" ) &
+$ timeout 10 openssl s_client -connect 127.0.0.1:443 -servername b.test -showcerts </dev/null >/tmp/mc/s5/c1.out 2>&1; echo "EXIT=$?"
+EXIT=0
+[exit=0]
+
+$ tcpdump stderr:
+tcpdump: listening on lo, link-type EN10MB (Ethernet), snapshot length 262144 bytes
+25 packets captured
+50 packets received by filter
+0 packets dropped by kernel
+
+$ ls -l /tmp/mc/s5/c1.pcap
+-rw-r--r-- 1 tcpdump tcpdump 9589 Oct 31 21:29 /tmp/mc/s5/c1.pcap
+
+--- raw readback, direction filter dstport==19098, no SYN/FIN/RST ---
+$ tcpdump -nn -tttt -r /tmp/mc/s5/c1.pcap 'tcp dst port 19098 and (tcp[tcpflags] & (tcp-syn|tcp-fin|tcp-rst)) == 0' -c 2 -X
+reading from file /tmp/mc/s5/c1.pcap, link-type EN10MB (Ethernet), snapshot length 262144
+2026-10-31 21:29:12.996635 IP 127.0.0.1.58678 > 127.0.0.1.19098: Flags [.], ack 2618430896, win 512, options [nop,nop,TS val 1216643430 ecr 1216643430], length 0
+	0x0000:  4500 0034 1880 4000 4006 2442 7f00 0001  E..4..@.@.$B....
+	0x0010:  7f00 0001 e536 4a9a 9015 2113 9c12 15b0  .....6J...!.....
+	0x0020:  8010 0200 fe28 0000 0101 080a 4884 8166  .....(......H..f
+	0x0030:  4884 8166                                H..f
+2026-10-31 21:29:12.996703 IP 127.0.0.1.58678 > 127.0.0.1.19098: Flags [P.], seq 0:28, ack 1, win 512, options [nop,nop,TS val 1216643430 ecr 1216643430], length 28
+	0x0000:  4500 0050 1881 4000 4006 2425 7f00 0001  E..P..@.@.$%....
+	0x0010:  7f00 0001 e536 4a9a 9015 2113 9c12 15b0  .....6J...!.....
+	0x0020:  8018 0200 fe44 0000 0101 080a 4884 8166  .....D......H..f
+	0x0030:  4884 8166 0d0a 0d0a 000d 0a51 5549 540a  H..f.......QUIT.
+	0x0040:  2111 000c 7f00 0001 7f00 0001 ea7c 01bb  !............|..
+[exit=0]
+
+--- packet inventory (both directions, ports visible) ---
+$ tcpdump -nn -tttt -r /tmp/mc/s5/c1.pcap -c 8
+2026-10-31 21:29:12.996617 IP 127.0.0.1.58678 > 127.0.0.1.19098: Flags [S], seq 2417303826, win 65495, options [mss 65495,sackOK,TS val 1216643430 ecr 0,nop,wscale 7], length 0
+2026-10-31 21:29:12.996627 IP 127.0.0.1.19098 > 127.0.0.1.58678: Flags [S.], seq 2618430895, ack 2417303827, win 65483, options [mss 65495,sackOK,TS val 1216643430 ecr 1216643430,nop,wscale 7], length 0
+2026-10-31 21:29:12.996635 IP 127.0.0.1.58678 > 127.0.0.1.19098: Flags [.], ack 1, win 512, options [nop,nop,TS val 1216643430 ecr 1216643430], length 0
+2026-10-31 21:29:12.996703 IP 127.0.0.1.58678 > 127.0.0.1.19098: Flags [P.], seq 1:29, ack 1, win 512, options [nop,nop,TS val 1216643430 ecr 1216643430], length 28
+2026-10-31 21:29:12.996709 IP 127.0.0.1.19098 > 127.0.0.1.58678: Flags [.], ack 29, win 512, options [nop,nop,TS val 1216643430 ecr 1216643430], length 0
+2026-10-31 21:29:12.996761 IP 127.0.0.1.58678 > 127.0.0.1.19098: Flags [P.], seq 29:337, ack 1, win 512, options [nop,nop,TS val 1216643430 ecr 1216643430], length 308
+2026-10-31 21:29:12.996766 IP 127.0.0.1.19098 > 127.0.0.1.58678: Flags [.], ack 337, win 510, options [nop,nop,TS val 1216643430 ecr 1216643430], length 0
+2026-10-31 21:29:13.223524 IP 127.0.0.1.19098 > 127.0.0.1.58678: Flags [P.], seq 1:1449, ack 337, win 512, options [nop,nop,TS val 1216643657 ecr 1216643430], length 1448
+[exit=0]
+
+--- payload extractor: first data-bearing packet towards 19098 ---
+$ python3 extract_payload.py /tmp/mc/s5/c1.pcap
+pkt1   127.0.0.1:58678 -> 127.0.0.1:19098  seq=2417303827 len=28  hex=0d0a0d0a000d0a515549540a2111000c7f0000017f000001ea7c01bb
+pkt2   127.0.0.1:58678 -> 127.0.0.1:19098  seq=2417303855 len=308  hex=160301012f0100012b030317ebe09b0985e93ca254305d8a7976383d4ea1ff92d34fa57377b9e9eb5c5555204a64622b
+pkt3   127.0.0.1:19098 -> 127.0.0.1:58678  seq=2618430896 len=1448  hex=160303007a0200007603031b3dc05abfe8b11d28d5c257e4145aee7fd62a57fccada6908d423db63154345204a64622b
+pkt4   127.0.0.1:19098 -> 127.0.0.1:58678  seq=2618432344 len=4096  hex=2761f97265566b4a9ae8dafe56cdb3fd4e5a1d38d5479552c337c89166dcfe42a0c0e3fcf943988e61e0a29ddc388d1a
+pkt5   127.0.0.1:19098 -> 127.0.0.1:58678  seq=2618436440 len=917  hex=2135c23ac5a527a147ffd9e32b62bda5f7dbb44deb2d5aa26ec16bdf35ddeeab586308e043ab55afde3088715ddabd7a
+pkt6   127.0.0.1:58678 -> 127.0.0.1:19098  seq=2417304163 len=80  hex=14030300010117030300452d2c679f7cc5ef1c9022939e162a6d04ac55cac73033eb998cc537ea26e42fcec6925c8dbb
+pkt7   127.0.0.1:58678 -> 127.0.0.1:19098  seq=2417304243 len=24  hex=170303001379c298ce98f2948ab0db3a9351a7128d1ae121
+pkt8   127.0.0.1:19098 -> 127.0.0.1:58678  seq=2618437357 len=287  hex=170303011af383003a9a21a5e7e75738aa83fc14a5c11423857f97041f0ed3423c2ac15dabb873d42fff2256cffb17a4
+pkt9   127.0.0.1:19098 -> 127.0.0.1:58678  seq=2618437644 len=311  hex=170303011a87fc5690e6eb74082761cc0728b512f21a5b6209ff3c9d972c953bd6ccbc44f25ed9030cdaa968d0fbe0b8
+---
+FIRST_SEGMENT_TO_19098: 0d0a0d0a000d0a515549540a2111000c7f0000017f000001ea7c01bb
+STREAM_TO_19098_PREFIX_64: 0d0a0d0a000d0a515549540a2111000c7f0000017f000001ea7c01bb160301012f0100012b030317ebe09b0985e93ca254305d8a7976383d4ea1ff92d34fa573
+STREAM_BYTE0_12_EQ_PROXY_V2_SIG: True
+STREAM_BYTE12_VER_CMD: 21
+STREAM_BYTE13_FAMILY_PROTO: 11
+PROXY_HDR_LEN_FIELD: 12
+PROXIED_SRC: 127.0.0.1:60028
+PROXIED_DST: 127.0.0.1:443
+BYTES_28_31_AFTER_PROXY_HDR: 160301
+IS_16_03_01: True
+[exit=0]
+
+--- presented certificate (independent second handshake) ---
+$ timeout 10 openssl s_client -connect 127.0.0.1:443 -servername b.test -showcerts </dev/null 2>/dev/null | openssl x509 -noout -subject -issuer
+reading from file /tmp/mc/s5/c1.pcap, link-type EN10MB (Ethernet), snapshot length 262144
+subject=C = US, ST = WA, L = Redmond, O = Microsoft Corporation, CN = www.microsoft.com
+issuer=C = US, O = Microsoft Corporation, CN = Microsoft TLS G2 RSA CA OCSP 04
+[exit=0]
+
+--- negative assertions on that certificate ---
+$ timeout 10 openssl s_client -connect 127.0.0.1:443 -servername b.test -showcerts </dev/null 2>/dev/null | openssl x509 -noout -subject -issuer | grep -c 'Caddy Local Authority' || true
+0
+[exit=0]
+
+$ timeout 10 openssl s_client -connect 127.0.0.1:443 -servername b.test -showcerts </dev/null 2>/dev/null | openssl x509 -noout -subject -issuer | grep -c 'CN = b.test' || true
+0
+[exit=0]
+
+--- Caddy access log: grep -c for the SNI ---
+$ grep -c "b.test" /tmp/mc/s5/caddy-access.log
+0
+[exit=1]
+
+$ grep -c 'b.test' /tmp/mc/s5/caddy-access.log
+0
+[exit=1]
+
+--- control: a.test IS terminated by Caddy and must appear in the same log ---
+$ curl -sk --resolve a.test:443:127.0.0.1 https://a.test/ -o /dev/null -w 'control_http=%{http_code}\n'
+control_http=200
+[exit=0]
+
+$ grep -c 'a.test' /tmp/mc/s5/caddy-access.log
+1
+[exit=0]
+
+$ grep -o '"host":"a.test"' /tmp/mc/s5/caddy-access.log | sort | uniq -c
+      1 "host":"a.test"
+[exit=0]
+
+--- re-check the REALITY SNI after the control request ---
+$ grep -c 'b.test' /tmp/mc/s5/caddy-access.log
+0
+[exit=1]

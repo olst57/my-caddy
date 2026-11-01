@@ -1,0 +1,136 @@
+SP6-F5 — B misses layer4: the delivery config's 404 isolation
+
+Spec:      D:\AiWork\Qoder\my-caddy-v4-SPEC.md §12.4 (SP6-F5)
+Host:      hcss-ecs-94ac (hw-gz), Ubuntu 24.04.4 LTS, x86_64, root
+Verdict:   PASS
+
+What ran: the overlay changes only the layer4 matcher's SNI, to
+`<HOST-7>`, and the access-log path; b.test keeps `tls internal` plus
+`respond 404`. `diff` against the F1-F4 overlay is pasted, and the matcher and
+handler are read back from the adapted JSON so the claim is about what Caddy
+loaded, not about what the file says.
+
+Results, each against its own observable:
+  1. First status line `HTTP/2 404`.
+  2. No `X-Site`, no `Proxy-Authenticate` (grep exit 1).
+  3. Body is 0 bytes, so the "<= 16 bytes" equivalent criterion holds. The
+     spec's `SITE-MARKER` count is 0 as well, but it is vacuous here because
+     this backend emits `SITE-BODY-v4`, not `SITE-MARKER`; the body-marker count
+     for the marker this backend actually uses is also 0. Both are pasted, and
+     the length rule is the one relied on.
+
+Supporting observation: the b.test handshake in this overlay is terminated
+locally — issuer `CN = Caddy Local Authority - ECC Intermediate`, empty subject
+DN, verification ok — and Caddy's access log records the request with
+`"status":404,"size":0`. The 404 is therefore B's own answer on the tls path,
+not a forwarded or proxied response.
+
+Scope limit stated by the spec and repeated here: this item measures only
+"layer4 miss -> 404". The slow-ClientHello timeout fallback path (U9) was not
+constructed this round; `matching_timeout == 3000000000` is covered by SP3-C6,
+and nothing here claims what a timed-out ClientHello does.
+
+### host: hcss-ecs-94ac  date: 2026-10-31T14:01:07Z  kernel: 6.8.0-136-generic
+
+=== overlay: @reality SNI changed to a name nothing uses; everything else
+    including b.test + tls internal + respond 404 is unchanged ===
+$ diff /tmp/mc/s6/Caddyfile /tmp/mc/s6/Caddyfile.nomatch
+1,9c1,3
+< # SP6 test overlay of deploy/Caddyfile.
+< #
+< # Directive-for-directive identical to deploy/Caddyfile with exactly three
+< # deltas, all recorded in the evidence:
+< #   1. <NAIVE_USER> -> user, <NAIVE_PASSWORD> -> the run password.
+< #   2. comments removed (no directive change).
+< #   3. an access-log snippet imported by each site, because the delivery config
+< #      ships no access log and SP6-F3 judges on it. It is an observer only and
+< #      changes no routing.
+---
+> # SP6-F5 overlay: byte-identical to the SP6 base overlay except the layer4
+> # matcher's SNI, which is changed to a name nothing uses, and the access-log
+> # path. b.test keeps `tls internal` + `respond 404`.
+17c11
+< 				@reality tls sni b.test
+---
+> 				@reality tls sni <HOST-7>
+32c26
+< 		output file /tmp/mc/s6/caddy-access.log
+---
+> 		output file /tmp/mc/s6/caddy-access-f5.log
+[exit=1]
+
+
+=== stack under test ===
+    instances: caddy=1 xray=1 backend=1
+    LISTEN 0      5          127.0.0.1:8080       0.0.0.0:*          
+    LISTEN 0      4096       127.0.0.1:2019       0.0.0.0:*          
+    LISTEN 0      4096       127.0.0.1:19098      0.0.0.0:*          
+    LISTEN 0      4096               *:443              *:*          
+
+=== the matcher as Caddy actually loaded it ===
+$ ./caddy adapt --config /tmp/mc/s6/Caddyfile.nomatch --adapter caddyfile 2>/dev/null > /tmp/f5.json; echo adapted
+adapted
+[exit=0]
+
+$ python3 -c "import json;d=json.load(open('/tmp/f5.json'));w=d['apps']['http']['servers']['srv0']['listener_wrappers'][0];print('layer4 match =', json.dumps(w['routes'][0]['match']));print('layer4 handler =', json.dumps(w['routes'][0]['handle'][0]))"
+layer4 match = [{"tls": {"sni": ["<HOST-7>"]}}]
+layer4 handler = {"handler": "proxy", "proxy_protocol": "v2", "upstreams": [{"dial": ["127.0.0.1:19098"]}]}
+[exit=0]
+
+
+=== warm-up handshake to b.test (must now be terminated locally) ===
+$ timeout 10 openssl s_client -connect 127.0.0.1:443 -servername b.test -showcerts </dev/null >/tmp/f5.tls 2>&1; echo "EXIT=$?"
+EXIT=0
+[exit=0]
+
+$ grep -E 'subject=|issuer=|Verify return code' /tmp/f5.tls
+subject=
+issuer=CN = Caddy Local Authority - ECC Intermediate
+Verify return code: 0 (ok)
+    Verify return code: 0 (ok)
+[exit=0]
+
+
+=== request to b.test ===
+$ curl -sk --resolve b.test:443:127.0.0.1 https://b.test/ -D /tmp/f5.hdr -o /tmp/f5.body
+CURL_EXIT=0
+
+$ head -1 /tmp/f5.hdr
+HTTP/2 404 
+[exit=0]
+
+$ grep -i -e '^x-site:' -e '^proxy-authenticate:' /tmp/f5.hdr
+[exit=1]
+
+$ grep -c 'SITE-MARKER' /tmp/f5.body || true
+0
+[exit=0]
+
+  SITE-MARKER is not a marker this backend emits, so that count is
+  vacuous here. The equivalent criterion the spec allows is body length
+  <= 16 bytes; both the length and the absence of this backend's actual
+  body marker (SITE-BODY-v4) are measured below.
+$ wc -c < /tmp/f5.body
+0
+[exit=0]
+
+$ grep -c 'SITE-BODY-v4' /tmp/f5.body || true
+0
+[exit=0]
+
+$ cat /tmp/f5.body; echo '(end of body)'
+(end of body)
+[exit=0]
+
+
+=== where the request landed, per Caddy's access log ===
+$ grep 'b.test' /tmp/mc/s6/caddy-access-f5.log
+{"level":"info","ts":1793455270.7410142,"logger":"http.log.access.log1","msg":"handled request","request":{"remote_ip":"127.0.0.1","remote_port":"34592","client_ip":"127.0.0.1","proto":"HTTP/2.0","method":"GET","host":"b.test","uri":"/","headers":{"User-Agent":["curl/8.23.0"],"Accept":["*/*"]},"tls":{"resumed":false,"version":772,"cipher_suite":4865,"proto":"h2","server_name":"b.test","ech":false}},"bytes_read":0,"user_id":"","duration":0.00003293,"size":0,"status":404,"resp_headers":{"Server":["Caddy"],"Alt-Svc":["h3=\":443\"; ma=2592000"],"Content-Type":[]}}
+[exit=0]
+
+
+=== judgement ===
+observed status=404 body_bytes=0 site_or_proxy_headers=0 body_marker_hits=0
+CHECK first status line 404 : PASS
+CHECK no X-Site / Proxy-Authenticate : PASS
+CHECK body carries no site content (<=16 bytes, no SITE-BODY-v4) : PASS
