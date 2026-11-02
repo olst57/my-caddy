@@ -100,9 +100,14 @@ command -v jq >/dev/null 2>&1 || fatal "jq is required and was not found on PATH
 [ -f "$CADDY_BIN" ] || fatal "CADDY_BIN not found: $CADDY_BIN"
 [ -x "$CADDY_BIN" ] || fatal "CADDY_BIN is not executable: $CADDY_BIN"
 
-ADAPTED="$(mktemp)"
-ADAPTED_ERR="$(mktemp)"
-trap 'rm -f "$ADAPTED" "$ADAPTED_ERR"' EXIT
+# One controlled scratch directory. Every temporary artifact below lives inside
+# it, and the single EXIT trap removes the whole tree, so the success path and
+# any early exit both leave nothing behind in the system temp directory. The
+# trap is installed before the first file is written.
+WORKDIR="$(mktemp -d)" || fatal "mktemp -d failed for the verifier scratch directory"
+trap 'rm -rf "$WORKDIR"' EXIT
+ADAPTED="$WORKDIR/adapted.json"
+ADAPTED_ERR="$WORKDIR/adapt.err"
 
 adapt() {
 	"$CADDY_BIN" adapt --config "$CADDYFILE" --adapter caddyfile \
@@ -134,7 +139,7 @@ fi
 
 # ---------------------------------------------------------------- S3-2
 # caddy validate accepts the delivery Caddyfile.
-val_out=$(mktemp)
+val_out="$WORKDIR/validate.out"
 if "$CADDY_BIN" validate --config "$CADDYFILE" >"$val_out" 2>&1; then
 	emit S3-2 PASS
 else
@@ -154,7 +159,7 @@ rm -f "$val_out"
 # site block exit=1 "unrecognized directive". So the token is appended inside a
 # site block, which is what makes the control sensitive. Recorded in
 # docs/VERIFY.md and .gate/release/DEVIATIONS.md.
-s33="$(mktemp).Caddyfile"
+s33="$WORKDIR/sensitivity.Caddyfile"
 cp "$CADDYFILE" "$s33"
 printf '\nverify_sensitivity_probe.test {\n\tthis_directive_does_not_exist\n}\n' >>"$s33"
 if ! "$CADDY_BIN" validate --config "$s33" >/dev/null 2>&1; then
@@ -189,7 +194,7 @@ ck() {
 		| (index("layer4") < index("tls"))]
 		| (length == 1 and .[0])' "$1" >/dev/null 2>&1
 }
-swapped=$(mktemp)
+swapped="$WORKDIR/swapped.json"
 jq '.apps.http.servers |= with_entries(.value.listener_wrappers |=
 	(if (type == "array" and length == 2) then [.[1], .[0]] else . end))' \
 	"$ADAPTED" >"$swapped"
@@ -371,7 +376,7 @@ join() { # $1=xray json
 		and (($ri.streamSettings.realitySettings.serverNames) == $sni)
 		and (($sni | length) == 1)' "$ADAPTED" >/dev/null 2>&1
 }
-unpaired=$(mktemp)
+unpaired="$WORKDIR/unpaired.json"
 jq '.inbounds[0].streamSettings.sockopt.acceptProxyProtocol = false' \
 	"$XRAY_CONFIG" >"$unpaired"
 if join "$XRAY_CONFIG" && ! join "$unpaired"; then
@@ -537,19 +542,18 @@ done
 # is run against a synthetic match (must match) and a synthetic placeholder
 # (must not match), in a scratch directory required to live outside the repo.
 g1_ctl_ok=1
-g1_tmp="$(mktemp -d 2>/dev/null)" || g1_tmp=""
+g1_tmp="$WORKDIR/g1"
+mkdir -p "$g1_tmp" 2>/dev/null || g1_tmp=""
 case "${g1_tmp:-}" in
 '')
 	g1_ctl_ok=0
-	printf '  G1 controls: mktemp -d failed\n' >&2
+	printf '  G1 controls: scratch dir creation failed\n' >&2
 	;;
 "$REPO_ROOT"|"$REPO_ROOT"/*)
 	g1_ctl_ok=0
 	printf '  G1 controls: scratch dir is inside the repository: %s\n' "$g1_tmp" >&2
 	;;
 esac
-g1_cleanup() { [ -n "${g1_tmp:-}" ] && rm -rf "$g1_tmp"; }
-trap 'g1_cleanup; rm -f "$ADAPTED" "$ADAPTED_ERR"' EXIT
 
 if [ "$g1_ctl_ok" -eq 1 ]; then
 	# The bodies are assembled at run time on purpose. Spelling a

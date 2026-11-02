@@ -385,10 +385,15 @@ ITEM S7-15 PASS
 ITEM S7-18 FAIL
 ```
 
-`S7-18` FAILs because this clone carries no `v0.3.0` tag, so there is no baseline
-to diff `deploy/` against. It fails closed rather than skipping, because a
-missing baseline cannot be read as "unchanged". It stays FAIL until the tag
-exists.
+The tagged remote carries `v0.3.0`. A full `git clone` fetches that ref, and
+`deploy/` has no diff from `v0.3.0` to the current HEAD, so `S7-18` passes there
+while `deploy/` remains unchanged since `v0.3.0`. The transcript above is kept as
+recorded: that clone held no tag, which is why it printed FAIL.
+
+A shallow clone (`--depth 1`) or a clone that fetches no tags lacks the ref, so
+`S7-18` FAILs closed rather than skipping — a freeze that cannot be diffed is
+not evidence of a freeze. Run `git fetch --tags` first when unsure, and give
+any CI checkout of `verify.sh` `fetch-depth: 0`.
 
 ## What the runtime actually answers
 
@@ -474,6 +479,21 @@ the whole claim, and U1 is closed only to that extent: this is not evidence that
 a secret path resists probing in general, and nothing here says what another
 client or another probe set would see. Measured in `.gate/release/SP4-D6.txt`;
 not re-run in v0.2.1. The delivery config keeps the form it already has.
+
+### An unauthenticated CONNECT is not answered 407
+
+The delivery config enables `probe_resistance example.com`, and that directive
+rewrites the rejection path: an unauthenticated CONNECT is not answered `407` in this delivery.
+It is handed on as an ordinary site request, so a prober sees the site's own
+reply — naive's decoy behaviour — not a proxy error.
+
+The observable is whether a tunnel was established, not the status code alone:
+valid `Proxy-Authorization` gives a tunnel, an inner `200` and the origin's own
+body; wrong or missing credentials give no tunnel, the request falling through
+to the site handler — `502` with the backend down, a decoy page with it up.
+
+Do not use `407` as a pass condition: in this delivery config it does not occur.
+Disposition: `.gate/PM-DISPOSITION-407.md`.
 
 ### `listener_wrappers { tls }` alone cannot start
 
