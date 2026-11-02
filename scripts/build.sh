@@ -13,7 +13,8 @@
 #       sagernet entry
 #   S10 both linux/amd64 and linux/arm64 artifacts, each with a sha256
 #
-# Why --replace is mandatory rather than decorative: klzgrad/forwardproxy@naive
+# Why --replace is mandatory rather than decorative: the forwardproxy naive
+# branch (upstream: klzgrad/forwardproxy, which this project's fork tracks)
 # calls caddyhttp.IdleTimeoutsFromContext (forwardproxy.go:353-357), a symbol
 # that does not exist in caddy v2.11.7. The naive README's own build line omits
 # both the patch and the replace, so it cannot compile against this tag. The
@@ -24,16 +25,22 @@
 #
 # Environment overrides (all optional):
 #   CADDY_TAG        default v2.11.7
-#   FWDPROXY_SHA     default resolved from klzgrad/forwardproxy@naive
-#   L4_SHA           default resolved from mholt/caddy-l4@master
+#   FWDPROXY_SHA     default resolved from the forwardproxy fork below
+#   L4_SHA           default resolved from the caddy-l4 fork below
 #   XCADDY_VERSION   default resolved to the newest stable tag
 #   GO_VERSION       informational only; the toolchain comes from CI setup-go
 #   DIST_DIR         default ./dist
 #   BUILD_DIR        default ./.build
 #
-# Every pin is resolved to a concrete 40-hex SHA (or a concrete tag for tools
-# that need a module version) and written to dist/pins.txt, so a run records
-# exactly what it built.
+# The two replaced modules are built from this project's own forks, and their
+# commits are resolved from the fork branch heads at build time. Switching to a
+# newer upstream is therefore not a constant to edit in this file: it is the
+# deliberate act of syncing the fork, which moves the branch head. That keeps the
+# automated build working across upstream upgrades; nothing here freezes a
+# version, on purpose. Each run writes the commits, tool versions and Go
+# toolchain it actually used into dist/pins.txt, and that receipt is also the
+# replay recipe: pass those three values back in as FWDPROXY_SHA, L4_SHA and
+# XCADDY_VERSION to rebuild from exactly the same inputs.
 
 set -euo pipefail
 
@@ -64,30 +71,38 @@ fi
 mkdir -p "$DIST_DIR" "$BUILD_DIR"
 
 # ------------------------------------------------------------------- pins
+# Sources are this project's forks, not upstream. The branch head of each fork
+# is resolved here and recorded in pins.txt; there is no SHA constant to bump,
+# so a version change is "sync the fork", an explicit human action.
+FWDPROXY_REPO=https://github.com/olst57/forwardproxy
+FWDPROXY_REF=refs/heads/naive
+L4_REPO=https://github.com/olst57/caddy-l4
+L4_REF=refs/heads/master
+
 resolve_sha() { # $1=repo $2=ref
 	local sha
 	sha=$(git ls-remote "$1" "$2" | awk '{print $1}' | head -n1)
 	printf '%s' "$sha"
 }
 
-if [ -z "${FWDPROXY_SHA:-}" ]; then
-	FWDPROXY_SHA=$(resolve_sha https://github.com/klzgrad/forwardproxy refs/heads/naive)
-fi
-if [ -z "${L4_SHA:-}" ]; then
-	L4_SHA=$(resolve_sha https://github.com/mholt/caddy-l4 refs/heads/master)
-fi
+if [ -z "${FWDPROXY_SHA:-}" ]; then FWDPROXY_SHA=$(resolve_sha "$FWDPROXY_REPO" "$FWDPROXY_REF"); fi
+if [ -z "${L4_SHA:-}" ]; then L4_SHA=$(resolve_sha "$L4_REPO" "$L4_REF"); fi
 if [ -z "${XCADDY_VERSION:-}" ]; then
 	XCADDY_VERSION=$(git ls-remote --tags --refs https://github.com/caddyserver/xcaddy \
 		| awk '{print $2}' | sed 's#refs/tags/##' \
 		| grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
 fi
 
+# Shape check, not a pin: it catches a failed or truncated lookup before any
+# clone or compile, and it says nothing about which version is acceptable. A
+# caller-supplied override is accepted as long as it has the right shape.
 for v in FWDPROXY_SHA L4_SHA; do
 	val="${!v}"
 	printf '%s' "$val" | grep -qE '^[0-9a-f]{40}$' \
-		|| die "$v did not resolve to a 40-hex commit (got '$val')"
+		|| die "$v is not a 40-hex commit (got '$val')"
 done
-[ -n "$XCADDY_VERSION" ] || die "XCADDY_VERSION resolved to nothing"
+printf '%s' "$XCADDY_VERSION" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+	|| die "XCADDY_VERSION is not an exact vX.Y.Z tag (got '$XCADDY_VERSION')"
 
 log "pins: caddy=$CADDY_TAG forwardproxy=$FWDPROXY_SHA caddy-l4=$L4_SHA xcaddy=$XCADDY_VERSION"
 
@@ -127,21 +142,29 @@ if git -C "$SRC" grep -q -I 'sagernet' -- . 2>/dev/null; then
 fi
 
 # ------------------------------------------------------------------- build
-export PATH="$PATH:$(go env GOPATH)/bin"
-if ! command -v xcaddy >/dev/null 2>&1; then
-	log "installing xcaddy@$XCADDY_VERSION"
-	go install "github.com/caddyserver/xcaddy/cmd/xcaddy@$XCADDY_VERSION" >/dev/null
-fi
+# The xcaddy that builds the artifacts is always the version resolved above,
+# installed unconditionally. Installing only when nothing is on PATH would let
+# an image that ships another xcaddy silently float this build input, and
+# pins.txt would then name a version the build did not use. Invoking the binary
+# by absolute path closes the remaining hole: a stale xcaddy earlier in PATH
+# cannot shadow the freshly installed one.
+XCADDY_BIN="$(go env GOPATH)/bin/xcaddy"
+log "installing xcaddy@$XCADDY_VERSION"
+go install "github.com/caddyserver/xcaddy/cmd/xcaddy@$XCADDY_VERSION" >/dev/null
+[ -x "$XCADDY_BIN" ] || die "go install produced no executable at $XCADDY_BIN"
 
 build_one() { # $1=GOARCH
 	local arch="$1" out="$DIST_DIR/caddy-linux-$1"
 	log "building linux/$arch"
 	(
 		cd "$BUILD_DIR"
-		GOOS=linux GOARCH="$arch" CGO_ENABLED=0 xcaddy build "$CADDY_TAG" \
+		# --with is "import path=replacement module path@version". A go module
+		# path cannot carry a scheme, so the fork URL is stripped to its path
+		# form here; the repo constants stay URLs because git ls-remote wants them.
+		GOOS=linux GOARCH="$arch" CGO_ENABLED=0 "$XCADDY_BIN" build "$CADDY_TAG" \
 			--replace "github.com/caddyserver/caddy/v2=$SRC" \
-			--with "github.com/caddyserver/forwardproxy=github.com/klzgrad/forwardproxy@$FWDPROXY_SHA" \
-			--with "github.com/mholt/caddy-l4=github.com/mholt/caddy-l4@$L4_SHA" \
+			--with "github.com/caddyserver/forwardproxy=${FWDPROXY_REPO#https://}@$FWDPROXY_SHA" \
+			--with "github.com/mholt/caddy-l4=${L4_REPO#https://}@$L4_SHA" \
 			--output "$out"
 	)
 	[ -f "$out" ] || die "build produced no file at $out"
@@ -185,6 +208,7 @@ done
 	printf 'forwardproxy_sha=%s\n' "$FWDPROXY_SHA"
 	printf 'caddy_l4_sha=%s\n' "$L4_SHA"
 	printf 'xcaddy_version=%s\n' "$XCADDY_VERSION"
+	printf 'go_version=%s\n' "$(go env GOVERSION)"
 	printf 'patch=%s\n' "$(basename "$PATCH")"
 } > "$DIST_DIR/pins.txt"
 
