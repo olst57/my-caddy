@@ -24,6 +24,24 @@
 	# first, the ClientHello would already be consumed by the TLS stack and
 	# REALITY passthrough could not work. The order is semantic, not cosmetic.
 	servers :443 {
+		# Protocol surface pin. First phase deliberately does NOT enable
+		# HTTP/3, and this line is what makes that true rather than assumed.
+		#
+		# Caddy's compiled default is h1 h2 h3 (caddyhttp defaultProtocols).
+		# With h3 in the set, Caddy opens a QUIC listener on the same port and
+		# advertises h3 on :443 through an Alt-Svc response header on every
+		# HTTP/1.1 and HTTP/2 response. That gives one SNI two transport
+		# identities on one port, which is the coexistence hazard this
+		# deployment deliberately avoids.
+		#
+		# Declaring h1 h2 explicitly keeps the QUIC listener from being created
+		# at all, so no Alt-Svc is emitted. Client side must match: no quic://
+		# URI and h3 disabled in the client. Removing this line silently
+		# restores h3, so it is a boundary, not a preference.
+		#
+		# Configuration only: layer4 routing, REALITY and PROXY protocol
+		# semantics are untouched, and packet_conn_wrappers stays unused.
+		protocols h1 h2
 		listener_wrappers {
 			layer4 {
 				matching_timeout 3s
