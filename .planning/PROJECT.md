@@ -113,7 +113,7 @@ because the suite binds `:443` and samples sockets with `ss`.
 | Put `layer4` before `tls` | SNI must be read before TLS consumes the ClientHello | ✓ Good |
 | No site-level `basic_auth` | It ran before `forward_proxy` and answered 401 to every request | ✓ Good |
 | Enable `probe_resistance` | Unauthenticated CONNECT falls through to the site instead of 407 | ⚠ Revisit — target must not collide with the proxied destination |
-| Keep the `deploy/` freeze at one amendment | A second exception would weaken a supply-chain guard for a rule the docs already carry | ⚠ Revisit — option B needs a `verify.sh` change |
+| Keep the `deploy/` freeze at one amendment | A second exception would weaken a supply-chain guard for a rule the docs already carry | ✓ Good — option A chosen 2026-11-05 |
 | Verify offline first, then live | Config shape is cheap to check; only a live stack proves coexistence | ✓ Good |
 | Treat Windows as authoring-only | The binary is a Linux ELF; runtime checks need Linux/root | ✓ Good |
 
