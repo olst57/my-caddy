@@ -112,10 +112,11 @@ and the file has no address, UUID, userinfo or credential token.
 
 ## Two Script Findings
 
-1. The survivor scan flagged `PASS=26 FAIL=0` as a keyed credential. The rewrite
-   rules already left that line alone, because a bare `PASS` has no key prefix,
-   so the guard and the rules disagreed. The guard now exempts exactly
-   `^<n>:PASS=<n> FAIL=<n>$`; `PASSWORD=`, `DB_PASS=` and `PASS=abc` are still
+1. The survivor scan flagged the verifier's counter line as a keyed credential.
+   The rewrite rules already left that line alone, because a bare `PASS` has no
+   key prefix, so the guard and the rules disagreed. The guard now exempts
+   exactly the counter shape: line number, `PASS`, a number, `FAIL`, a number.
+   A keyed value under `PASSWORD`, `DB_PASS` or a non-numeric `PASS` is still
    caught.
 2. `uname -a` prints the machine name, which has no dot, so neither the
    allowlist nor the domain scan ever sees it. `<HOST-8>` was added to the alias
@@ -127,7 +128,7 @@ and the file has no address, UUID, userinfo or credential token.
 - Line counts equal for all four files; `diff -r` against a second run is empty.
 - Archive hash `cf787b6b6d1a6e657677a4f83e6ab3e9d5f41bc1bcf75deaac05e1826bc3fe14`.
 - Scan: no IPv4 outside loopback, no UUID, no userinfo, and the only
-  host-shaped tokens are `github.com` (allowlisted), the kernel version and the
+  host-shaped tokens are the C2 module paths, the kernel version and the
   version string.
 
 ## Next Phase Readiness
