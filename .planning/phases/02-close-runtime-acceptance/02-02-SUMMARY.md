@@ -121,7 +121,7 @@ after `ITEM S7-18 FAIL`. The rule is stated in `docs/VERIFY.md` and
 `docs/XRAY.md` instead; the register row waits on the same freeze decision that
 02-01 records.
 
-**Resolution (assumption, not a user reply):** option A was applied — the
+**Resolution (user-confirmed 2026-11-05):** option A was selected — the
 `deploy/` freeze stays at one amendment and the register keeps its v0.3.0
 content. The disjointness rule is enforced by CO-8 and stated in
 `docs/VERIFY.md` and `docs/XRAY.md`, so the behaviour is guarded even though

@@ -57,8 +57,8 @@ The first enforced run is pull request #1,
 and `coexist` printed the seven items that existed then and ended with
 `COEXIST: PASS`. The suite has since grown to eight items; the current head of
 the pull request,
-<https://github.com/olst57/my-caddy/actions/runs/42054615674>, on commit
-`d3b4f67`, prints `ITEM CO-1` through `ITEM CO-8` and the same two verdict
+<https://github.com/olst57/my-caddy/actions/runs/42058267555>, on commit
+`70bbad1`, prints `ITEM CO-1` through `ITEM CO-8` and the same two verdict
 lines. Both jobs are blocking, and that was measured rather than assumed: one
 control run failed `offline` alone (run 42052579628), and another failed
 `coexist` alone while `offline` passed (run 42053168208). Every other run

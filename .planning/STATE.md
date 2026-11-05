@@ -67,6 +67,9 @@ affecting current work:
 - The working-tree verification slice is the first thing to freeze, not
   something to rewrite from scratch.
 - Evidence is split by host: Windows authors, Linux executes.
+- Option A was confirmed on 2026-11-05: the `deploy/` freeze keeps exactly one
+  amendment, and the REALITY/decoy rules live in `docs/` instead of the
+  placeholder register.
 
 ### Pending Todos
 

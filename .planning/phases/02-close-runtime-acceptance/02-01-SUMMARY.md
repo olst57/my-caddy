@@ -108,9 +108,9 @@ The edit was reverted and `VERIFY: PASS 26/26` was restored. Extending the
 register therefore needs a decision about the freeze itself, which is recorded
 in `STATE.md` as the current blocker.
 
-**Resolution (assumption, not a user reply):** option A was applied, because
-it is the least-loss branch — it changes nothing in the frozen tree and keeps
-the supply-chain guard at exactly one amendment. The rule lives in
+**Resolution (user-confirmed 2026-11-05):** option A was selected. It changes
+nothing in the frozen tree and keeps the supply-chain guard at exactly one
+amendment. The rule lives in
 `docs/XRAY.md` and `docs/VERIFY.md`, which a deployer reads before touching
 `deploy/`. The missing register row is recorded here as a documented deviation.
 If the register must carry the rule, that is option B and it needs a decision
