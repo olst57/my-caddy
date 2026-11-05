@@ -6,9 +6,9 @@ name: verify
 #            scripts/verify.sh over the delivery configs (26 items).
 #   coexist  downloads that same binary and runs tests/coexist/run.sh, which
 #            starts the real stack on :443 and asserts the three roles with a
-#            control next to every assertion (CO-1..CO-7, including the
-#            HTTP/2 leg on the naive proxy hop and the absence of a QUIC
-#            listener on UDP :443).
+#            control next to every assertion (CO-1..CO-8, including the
+#            HTTP/2 leg on the naive proxy hop, the absence of a QUIC listener
+#            on UDP :443, and the decoy/target disjointness guard).
 #
 # The two jobs are separate on purpose: the offline verifier needs nothing but
 # the binary and jq, while the coexistence test binds :443 and needs root. A
