@@ -1,0 +1,20 @@
+# v0.4.3 host and binary record
+date: 2026-11-05T23:39:03+08:00
+uname: Linux <HOST-8> 6.8.0-136-generic #136-Ubuntu SMP PREEMPT_DYNAMIC Wed Jul  1 21:53:05 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+uid: 0
+commit: e5f5abd8f75eca50d8505b711cc97e8a51e7546f
+binary: dist/caddy-linux-amd64
+binary_sha256: 1a9115339c7a0edefd692d74324bd4906508c40b11bb781e841d5910337b2624
+--- sockets before run ---
+== tcp :443 ==
+State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess
+== udp :443 ==
+State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess
+== tcp :19098 ==
+State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess
+== udp :19098 ==
+State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess
+== tcp :8080 ==
+State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess
+== udp :8080 ==
+State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess

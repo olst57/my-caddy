@@ -107,3 +107,34 @@ grep -nE '([0-9]{1,3}\.){3}[0-9]{1,3}' .gate/release/SPRINT4-SUMMARY.md .gate/re
 `evidence/SP4-D1.txt:95`、`evidence/SP6-F2.txt:8`、`evidence/SP6-F5.txt:43` 三处出现同一个小写英文单词：`:95` 落在 Caddy 安装本地 CA 的固定提示语里，`:8` 是原件自带的尖括号指代形态，`:43` 是 diff 注释里的普通叙述词。**该字符串为普通词，非凭据。**
 
 依据是它被编译进 Caddy 自身：`dist/caddy-linux-amd64` 与 `dist/caddy-linux-arm64` 各命中 52 次，且出现在 Caddy 的提示串中（如 `(you might be prompted for …)`、`The … to hash`、`username and … cannot be empty`）。每轮运行的口令不会出现在厂商二进制的字符串表里，更不会两个架构命中数完全相同。三处的 `od -c` 原始字节与逐处定性见 `.gate/release/F9-REPORT.md` 的 F-10 一节。
+
+## v0.4.3 — 运行时验收证据（2026-11-05）
+
+- 输入：`.gate/v043/`（只读，未改动）
+- 命令：`bash scripts/redact-evidence.sh .gate/v043 evidence/v0.4.3`
+  - stdout：`redact-evidence.sh: 4 file(s) redacted into evidence/v0.4.3`
+  - stderr：空；退出码：`0`
+- 文件数：**4**
+- 行数校验（副本 / 原件）：`ci-runs.txt` 8/8、`coexist-8.log` 9/9、`host.txt` 20/20、`verify-26.log` 28/28
+- 幂等：同一输入连跑两次，`diff -r` 为空
+- 归档哈希：`sha256sum evidence/v0.4.3/* | sha256sum` = `cf787b6b6d1a6e657677a4f83e6ab3e9d5f41bc1bcf75deaac05e1826bc3fe14`
+- 别名空间：沿用 `<HOST-1>`…`<HOST-7>` 与 `<PUBLIC_IP-1>`…`<PUBLIC_IP-6>`；本轮新增 `<HOST-8>`，用于 `uname -a` 打印的裸机器名 —— 它不含点，域名扫描看不见它，只有别名表能替换
+
+| # | 文件 | 行数 | 用途 |
+|---|------|------|------|
+| 1 | `ci-runs.txt` | 8 | 五个绿灯 run、两个负向对照 run、PR 链接 |
+| 2 | `coexist-8.log` | 9 | `ITEM CO-1`…`ITEM CO-8` 与 `COEXIST: PASS` |
+| 3 | `host.txt` | 20 | 机器名（别名化）、uid、commit、二进制 sha256、四个端口的事前样本 |
+| 4 | `verify-26.log` | 28 | 26 条 `ITEM` 加 `PASS=26 FAIL=0` 与 `VERIFY: PASS` |
+
+### 本轮的两处已知差异
+
+1. `RTA-DISPOSITIONS.md` 是 `*.md`，`redact-evidence.sh` 按设计跳过 markdown，因此它**不在**本目录。它不含 IPv4、UUID、userinfo 或凭据，原件仍在 `.gate/v043/`，由 `docs/VERIFY.md` 引用。
+2. 幸存者扫描原先会把 `PASS=26 FAIL=0` 判成“键值凭据”，因为它匹配裸 `PASS=`。该行是验证器的计数器，不是口令，重写规则本来就不动它；扫描现在对该**精确形态**豁免，`PASSWORD=…`、`DB_PASS=…`、`PASS=abc` 仍会被拦下（`scripts/redact-evidence.sh`）。
+
+### 扫描结果
+
+- 字面 IPv4：无（除 `127.0.0.1`、`0.0.0.0`，本目录内也没有）
+- UUID 形状：无
+- URL userinfo 形态（`scheme://user:` 后跟非占位值再跟 `@`）：无
+- 主机形态 token：`github.com`（`docs/REDACTION.md` C2 允许）、内核版本串 `6.8.0-136-generic`、版本号 `v0.4.3`
