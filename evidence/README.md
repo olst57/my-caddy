@@ -117,20 +117,31 @@ grep -nE '([0-9]{1,3}\.){3}[0-9]{1,3}' .gate/release/SPRINT4-SUMMARY.md .gate/re
 - 文件数：**4**
 - 行数校验（副本 / 原件）：`ci-runs.txt` 8/8、`coexist-8.log` 9/9、`host.txt` 20/20、`verify-26.log` 28/28
 - 幂等：同一输入连跑两次，`diff -r` 为空
-- 归档哈希：`sha256sum evidence/v0.4.3/* | sha256sum` = `cf787b6b6d1a6e657677a4f83e6ab3e9d5f41bc1bcf75deaac05e1826bc3fe14`
+- 归档哈希：`sha256sum evidence/v0.4.3/* | sha256sum` = `ad92d5f5c51823e2df4df44a85b8c2b9f634da74de24c920cc9892539db4cb2a`
 - 别名空间：沿用 `<HOST-1>`…`<HOST-7>` 与 `<PUBLIC_IP-1>`…`<PUBLIC_IP-6>`；本轮新增 `<HOST-8>`，用于 `uname -a` 打印的裸机器名 —— 它不含点，域名扫描看不见它，只有别名表能替换
 
 | # | 文件 | 行数 | 用途 |
 |---|------|------|------|
 | 1 | `ci-runs.txt` | 8 | 五个绿灯 run、两个负向对照 run、PR 链接 |
 | 2 | `coexist-8.log` | 9 | `ITEM CO-1`…`ITEM CO-8` 与 `COEXIST: PASS` |
-| 3 | `host.txt` | 20 | 机器名（别名化）、uid、commit、二进制 sha256、四个端口的事前样本 |
+| 3 | `host.txt` | 20 | 机器名（别名化）、uid、commit `b60f042`、**release 资产**的 sha256、四个端口的事前样本 |
 | 4 | `verify-26.log` | 28 | 26 条 `ITEM` 加 `PASS=26 FAIL=0` 与 `VERIFY: PASS` |
 
 ### 本轮的两处已知差异
 
 1. `RTA-DISPOSITIONS.md` 是 `*.md`，`redact-evidence.sh` 按设计跳过 markdown，因此它**不在**本目录。它不含 IPv4、UUID、userinfo 或凭据，原件仍在 `.gate/v043/`，由 `docs/VERIFY.md` 引用。
 2. 幸存者扫描原先会把验证器的计数器行判成“键值凭据”，因为它匹配裸 `PASS` 后跟等号。该行是计数，不是口令，重写规则本来就不动它；扫描现在对该**精确形态**豁免，而 `PASSWORD`、`DB_PASS` 或非数字 `PASS` 后面的键值仍会被拦下（`scripts/redact-evidence.sh`）。
+
+### 采集对象：发布资产本身
+
+第一版归档采集的是本地构建的二进制（sha256 `1a9115…2624`）。发布后核对发现 GitHub release
+里的资产是**另一次构建**：`scripts/build.sh` 把 `caddy-l4` 的 `L4_REF` 默认为 `refs/heads/master`，
+该分支头在两次构建之间从 `f607ccea…` 前进到 `96e1a6bf…`，因此发布件的 sha256 是
+`693057c2f596e163144eb0d2991bd4c8b19cadb351199cb8cc87b183647618f2`。
+
+按“证据必须描述被发布的那个对象”的原则，两个套件已用**下载回来的 release 资产**在 `hw-gz`
+重跑：`PASS=26 FAIL=0`、`CO-1..CO-8 PASS`。本目录的副本即这一次采集，commit 为 `b60f042`。
+该漂移已记入 `docs/BUILD.md` 的 fork-ref 说明与本轮小结；把 fork 提交钉死是下一个里程碑的事。
 
 ### 扫描结果
 
