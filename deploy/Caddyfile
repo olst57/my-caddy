@@ -47,7 +47,7 @@
 				matching_timeout 3s
 				# Route only the SNI this tunnel owns. Any other SNI falls
 				# through to the tls wrapper below and is terminated locally.
-				@reality tls sni b.test
+				@reality tls sni c.test
 				route @reality {
 					proxy {
 						# PROXY v2 is paired with
