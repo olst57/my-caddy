@@ -21,15 +21,16 @@ See: .planning/PROJECT.md (updated 2026-11-05)
 
 ## Current Position
 
-Phase: 2 of 3 (Close runtime acceptance)
-Plan: 3 of 3 in current phase — 02-03 complete, one register row deferred
-Status: Blocked on a decision about the frozen `deploy/` tree
+Phase: 2 of 3 (Close runtime acceptance) — complete
+Plan: 3 of 3 — 02-01, 02-02 and 02-03 complete under option A
+Status: Ready for Phase 3; publishing needs merge and tag permission
 Last activity: 2026-11-05 — 02-01 recorded `option-a` in `docs/XRAY.md` and
 `docs/VERIFY.md`; 02-02 added CO-8 and moved the verdict to eight items; 02-03
 wrote `.gate/v043/RTA-DISPOSITIONS.md` (2 fixed, 5 documented, 2 deferred) and
 linked it from `docs/VERIFY.md`. The `deploy/PLACEHOLDERS.md` rows the first two
 plans ask for were reverted because S7-18 freezes `deploy/` at v0.3.0 apart
-from the protocol pin.
+from the protocol pin. Option A was applied as the least-loss default: the
+freeze is untouched and the missing register rows are documented deviations.
 
 Progress: [████░░░░░░] 38%
 
@@ -71,15 +72,15 @@ affecting current work:
 
 - Push `feat/protocol-pin` and confirm both CI jobs for 01-03.
 - Merge pull request #1 once approved.
-- Decide whether the `deploy/` freeze admits a second recorded amendment for
-  the placeholder register, or whether those rules stay in `docs/` only.
+- Approve merging pull request #1, then grant tag/release permission for
+  `v0.4.3` (03-01's blocking checkpoint).
 
 ### Blockers/Concerns
 
 - The verification slice is committed on `feat/protocol-pin` but not merged to
   `main`; `main` cannot reproduce the gate yet.
-- `deploy/PLACEHOLDERS.md` cannot be edited while S7-18 allows only the
-  `protocols h1 h2` amendment; 02-01 and 02-02 each ask for a row there.
+- Publishing is the last human gate: no tag or release exists yet, and
+  `main` still stops at `b01cf32` until the pull request is merged.
 - `docs/VERIFY.md` already refers to `v0.4.3` before the tag exists.
 - The v0.4.0 runtime findings are still open and must not be treated as
   implicitly fixed by the new suite.

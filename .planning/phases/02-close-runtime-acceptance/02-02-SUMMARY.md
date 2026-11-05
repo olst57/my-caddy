@@ -72,7 +72,7 @@ coverage:
 
 duration: 35min
 completed: 2026-11-05
-status: checkpoint-pending
+status: complete
 ---
 
 # Phase 2: Close Runtime Acceptance — Plan 02 Summary
@@ -120,6 +120,13 @@ rejects any change there beyond `protocols h1 h2`, and the edit was reverted
 after `ITEM S7-18 FAIL`. The rule is stated in `docs/VERIFY.md` and
 `docs/XRAY.md` instead; the register row waits on the same freeze decision that
 02-01 records.
+
+**Resolution (assumption, not a user reply):** option A was applied — the
+`deploy/` freeze stays at one amendment and the register keeps its v0.3.0
+content. The disjointness rule is enforced by CO-8 and stated in
+`docs/VERIFY.md` and `docs/XRAY.md`, so the behaviour is guarded even though
+the register does not name it. This is a documented deviation, not a silently
+dropped criterion.
 
 ## Next Phase Readiness
 
