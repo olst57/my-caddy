@@ -295,9 +295,10 @@ while IFS= read -r f; do
 			printf '%s|%s|hash survived redaction\n' "$base" "$hit" >> "$work/survivors.txt"
 		done
 	# A bare `PASS` is the verifier's tally, not a credential: the rewrite rules
-	# above deliberately leave `PASS=26 FAIL=0` alone because it has no key
+	# above deliberately leave the counter line alone because it has no key
 	# prefix. This scan has to agree with them, so exactly that shape is exempt;
-	# `PASSWORD=`, `DB_PASS=` and `PASS=abc` are still caught.
+	# a keyed value under `PASSWORD`, `DB_PASS` or a non-numeric `PASS` is still
+	# caught.
 	grep -nE '(PASS|PASSWORD|PASSWD)[[:space:]]*[=:][[:space:]]*[^<]' "$stage/$base" 2>/dev/null |
 		grep -vE '^[0-9]+:PASS=[0-9]+ FAIL=[0-9]+$' |
 		while IFS= read -r hit; do

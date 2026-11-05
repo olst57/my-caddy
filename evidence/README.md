@@ -130,11 +130,11 @@ grep -nE '([0-9]{1,3}\.){3}[0-9]{1,3}' .gate/release/SPRINT4-SUMMARY.md .gate/re
 ### 本轮的两处已知差异
 
 1. `RTA-DISPOSITIONS.md` 是 `*.md`，`redact-evidence.sh` 按设计跳过 markdown，因此它**不在**本目录。它不含 IPv4、UUID、userinfo 或凭据，原件仍在 `.gate/v043/`，由 `docs/VERIFY.md` 引用。
-2. 幸存者扫描原先会把 `PASS=26 FAIL=0` 判成“键值凭据”，因为它匹配裸 `PASS=`。该行是验证器的计数器，不是口令，重写规则本来就不动它；扫描现在对该**精确形态**豁免，`PASSWORD=…`、`DB_PASS=…`、`PASS=abc` 仍会被拦下（`scripts/redact-evidence.sh`）。
+2. 幸存者扫描原先会把验证器的计数器行判成“键值凭据”，因为它匹配裸 `PASS` 后跟等号。该行是计数，不是口令，重写规则本来就不动它；扫描现在对该**精确形态**豁免，而 `PASSWORD`、`DB_PASS` 或非数字 `PASS` 后面的键值仍会被拦下（`scripts/redact-evidence.sh`）。
 
 ### 扫描结果
 
 - 字面 IPv4：无（除 `127.0.0.1`、`0.0.0.0`，本目录内也没有）
 - UUID 形状：无
 - URL userinfo 形态（`scheme://user:` 后跟非占位值再跟 `@`）：无
-- 主机形态 token：`github.com`（`docs/REDACTION.md` C2 允许）、内核版本串 `6.8.0-136-generic`、版本号 `v0.4.3`
+- 主机形态 token：`docs/REDACTION.md` C2 允许的模块路径、内核版本串 `6.8.0-136-generic`、版本号 `v0.4.3`
