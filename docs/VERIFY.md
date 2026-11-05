@@ -44,14 +44,20 @@ limitation of the authoring host, not a verdict on the deliverable. The
 fail-closed behaviour itself **is** verified on that host, because that path was
 exercised.
 
-**CI runs `verify.sh` from v0.4.3 onward.** `.github/workflows/verify.yml` builds
+**CI runs `verify.sh` on this branch.** `.github/workflows/verify.yml` builds
 `dist/caddy-linux-amd64` from the pinned inputs, runs this verifier over the
 delivery configs, and then runs `tests/coexist/run.sh` against that same binary
 on `ubuntu-latest` (with root, because the coexistence test binds `:443`). The
 two older workflows do not run it: `.github/workflows/build.yml` builds the
-artifacts and `.github/workflows/gate0.yml` runs the Gate 0 probes. Every run
-quoted below is therefore historical and was manual: v0.2.0 in a Codespace,
-v0.2.1 on `hw-gz`.
+artifacts and `.github/workflows/gate0.yml` runs the Gate 0 probes.
+
+The first enforced run is pull request #1,
+<https://github.com/olst57/my-caddy/actions/runs/42049087626>, on commit
+`75bd95a` (2026-11-05). Job `offline` took 1m50s and printed `PASS=26 FAIL=0`
+then `VERIFY: PASS`; job `coexist` took 24s, printed `ITEM CO-1` through
+`ITEM CO-7`, and ended with `COEXIST: PASS`. Both jobs are blocking: either
+one failing makes the run red. Every other run quoted below is historical and
+was manual: v0.2.0 in a Codespace, v0.2.1 on `hw-gz`.
 
 The item set quoted below is the 26-item set that the workflow runs. The
 workflow exists so a regression is caught without a human re-running anything;

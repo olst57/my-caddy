@@ -32,8 +32,11 @@ The `build` workflow builds and checksums the artifacts and does not run
 `scripts/verify.sh`; the separate `verify` workflow
 (`.github/workflows/verify.yml`) does. It builds amd64, runs the offline
 verifier, then runs `tests/coexist/run.sh` against that same binary on
-`ubuntu-latest`. The historical verifier runs were manual, on ubuntu-latest in
-a GitHub Codespace and on `hw-gz`. See
+`ubuntu-latest`. The first enforced run is pull request #1,
+<https://github.com/olst57/my-caddy/actions/runs/42049087626>, on commit
+`75bd95a`: `offline` passed 26/26 (`VERIFY: PASS`) and `coexist` passed 7/7
+(`COEXIST: PASS`). The historical verifier runs were manual, on ubuntu-latest
+in a GitHub Codespace and on `hw-gz`. See
 `docs/VERIFY.md` for the provenance of that run and for the `chmod +x`
 requirement. The reproducibility limit is stated there as well; its evidence
 entry (D-5) is in `.gate/release/DEVIATIONS.md`, which is gitignored and not part
@@ -199,8 +202,8 @@ changed, against the same binary by sha256, and again printed `VERIFY: PASS`;
 that run and its log are described in `docs/VERIFY.md`. The item set has since
 grown: `scripts/verify.sh` now declares `EXPECTED_ITEMS=26`, and
 `docs/VERIFY.md` lists all 26 IDs. `scripts/verify.sh` now runs in CI on every
-push and pull request, so a regression is caught by the repository's own
-workflow rather than by a manual run.
+pull request targeting `main` and every push to `main`, so a regression is
+caught by the repository's own workflow rather than by a manual run.
 
 The hygiene gates read the **work tree**, not the index: `git grep --untracked`
 is used for the credential, UUID, hostname and placeholder scans, so a new file
