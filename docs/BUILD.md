@@ -56,6 +56,22 @@ xcaddy_version=v0.4.7
 patch=caddy-read-idle-timeout.patch
 ```
 
+### The two fork SHAs are resolved at build time
+
+`caddy_tag` and the patch are fixed, but `forwardproxy_sha` and `caddy_l4_sha`
+are **not** constants: `scripts/build.sh` resolves them from
+`refs/heads/master` of the two forks unless `FWDPROXY_SHA` or `L4_SHA` is
+passed in. `dist/pins.txt` is therefore a receipt for the run that produced it,
+not a promise that a later run rebuilds the same bytes.
+
+The v0.4.3 release makes that concrete. The binary used for the first
+`hw-gz` measurement was built when `caddy-l4` head was `f607ccea…`; by the time
+the release workflow ran, head had advanced to `96e1a6bf…`, so the published
+asset has a different sha256. The gate was re-run against the **release asset**
+before the evidence was finalized, and that is the run `evidence/v0.4.3/`
+records. Pinning the forks to the receipt SHAs is the open follow-up; until
+then, quote `pins.txt` from the artifact you actually downloaded.
+
 ## The one patch, and why `--replace` is mandatory
 
 `patches/caddy-read-idle-timeout.patch` is a compile-time requirement, not an

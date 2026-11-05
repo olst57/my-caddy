@@ -44,7 +44,8 @@ limitation of the authoring host, not a verdict on the deliverable. The
 fail-closed behaviour itself **is** verified on that host, because that path was
 exercised.
 
-**CI runs `verify.sh` on this branch.** `.github/workflows/verify.yml` builds
+**CI runs `verify.sh` on every pull request to `main` and every push to
+`main`; `v0.4.3` is the first tag whose run is green.** `.github/workflows/verify.yml` builds
 `dist/caddy-linux-amd64` from the pinned inputs, runs this verifier over the
 delivery configs, and then runs `tests/coexist/run.sh` against that same binary
 on `ubuntu-latest` (with root, because the coexistence test binds `:443`). The
@@ -64,6 +65,23 @@ control run failed `offline` alone (run 42052579628), and another failed
 `coexist` alone while `offline` passed (run 42053168208). Every other run
 quoted below is historical and was manual: v0.2.0 in a Codespace, v0.2.1 on
 `hw-gz`.
+
+### The tagged release, and which binary the evidence describes
+
+`v0.4.3` is an annotated tag on `b60f042`, the head of `main` after pull request
+#1 was rebase-merged. The `main` run for that commit is
+<https://github.com/olst57/my-caddy/actions/runs/42060352580>, with both jobs
+green.
+
+The release assets come from the `build` workflow, which runs on the release
+event. Its inputs are not fully fixed: the two fork SHAs are resolved from
+`refs/heads/master` at build time (`docs/BUILD.md` §The two fork SHAs are
+resolved at build time), and `caddy-l4` head advanced between the first
+measurement and the release build. The gate was therefore re-run on the
+downloaded `caddy-linux-amd64` asset, sha256
+`693057c2f596e163144eb0d2991bd4c8b19cadb351199cb8cc87b183647618f2`:
+`PASS=26 FAIL=0` and `CO-1` through `CO-8` PASS. `evidence/v0.4.3/` is that
+second run, so the evidence describes the artifact a reader downloads.
 
 The item set quoted below is the 26-item set that the workflow runs. The
 workflow exists so a regression is caught without a human re-running anything;
