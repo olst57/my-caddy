@@ -5,8 +5,8 @@ progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 8
-  completed_plans: 2
-  percent: 25
+  completed_plans: 3
+  percent: 38
 ---
 
 # Project State
@@ -22,14 +22,16 @@ See: .planning/PROJECT.md (updated 2026-11-05)
 ## Current Position
 
 Phase: 2 of 3 (Close runtime acceptance)
-Plan: 2 of 3 in current phase — 02-01 and 02-02 executed, one row deferred
+Plan: 3 of 3 in current phase — 02-03 complete, one register row deferred
 Status: Blocked on a decision about the frozen `deploy/` tree
 Last activity: 2026-11-05 — 02-01 recorded `option-a` in `docs/XRAY.md` and
-`docs/VERIFY.md`; 02-02 added CO-8 and moved the verdict to eight items. The
-`deploy/PLACEHOLDERS.md` rows those plans ask for were reverted because S7-18
-freezes `deploy/` at v0.3.0 apart from the protocol pin.
+`docs/VERIFY.md`; 02-02 added CO-8 and moved the verdict to eight items; 02-03
+wrote `.gate/v043/RTA-DISPOSITIONS.md` (2 fixed, 5 documented, 2 deferred) and
+linked it from `docs/VERIFY.md`. The `deploy/PLACEHOLDERS.md` rows the first two
+plans ask for were reverted because S7-18 freezes `deploy/` at v0.3.0 apart
+from the protocol pin.
 
-Progress: [███░░░░░░░] 25%
+Progress: [████░░░░░░] 38%
 
 ## Performance Metrics
 
@@ -43,7 +45,7 @@ Progress: [███░░░░░░░] 25%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1. Freeze the verification gate | 2 | 3 | 12min |
-| 2. Close runtime acceptance | 2 | 3 | 27min |
+| 2. Close runtime acceptance | 3 | 3 | 27min |
 | 3. Publish v0.4.3 | 0 | 2 | - |
 
 **Recent Trend:**
