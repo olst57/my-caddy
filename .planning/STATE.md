@@ -21,13 +21,13 @@ See: .planning/PROJECT.md (updated 2026-11-05)
 
 ## Current Position
 
-Phase: 1 of 3 (Freeze the verification gate)
-Plan: 3 of 3 in current phase — 01-03 executed, merge approval pending
-Status: Awaiting approval to merge pull request #1
-Last activity: 2026-11-05 — 01-03 opened
-<https://github.com/olst57/my-caddy/pull/1>; runs 42049087626 (`75bd95a`) and
-42049780180 (`c3bfa71`) both finished `offline` and `coexist` green, and the
-docs cite the first run instead of predicting CI.
+Phase: 2 of 3 (Close runtime acceptance)
+Plan: 2 of 3 in current phase — 02-01 and 02-02 executed, one row deferred
+Status: Blocked on a decision about the frozen `deploy/` tree
+Last activity: 2026-11-05 — 02-01 recorded `option-a` in `docs/XRAY.md` and
+`docs/VERIFY.md`; 02-02 added CO-8 and moved the verdict to eight items. The
+`deploy/PLACEHOLDERS.md` rows those plans ask for were reverted because S7-18
+freezes `deploy/` at v0.3.0 apart from the protocol pin.
 
 Progress: [███░░░░░░░] 25%
 
@@ -43,7 +43,7 @@ Progress: [███░░░░░░░] 25%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1. Freeze the verification gate | 2 | 3 | 12min |
-| 2. Close runtime acceptance | 0 | 3 | - |
+| 2. Close runtime acceptance | 2 | 3 | 27min |
 | 3. Publish v0.4.3 | 0 | 2 | - |
 
 **Recent Trend:**
@@ -69,13 +69,15 @@ affecting current work:
 
 - Push `feat/protocol-pin` and confirm both CI jobs for 01-03.
 - Merge pull request #1 once approved.
-- Decide the REALITY placeholder posture at the 02-01 checkpoint.
+- Decide whether the `deploy/` freeze admits a second recorded amendment for
+  the placeholder register, or whether those rules stay in `docs/` only.
 
 ### Blockers/Concerns
 
 - The verification slice is committed on `feat/protocol-pin` but not merged to
   `main`; `main` cannot reproduce the gate yet.
-- `hw-gz` cannot reach GitHub, so CI is observed from the authoring host.
+- `deploy/PLACEHOLDERS.md` cannot be edited while S7-18 allows only the
+  `protocols h1 h2` amendment; 02-01 and 02-02 each ask for a row there.
 - `docs/VERIFY.md` already refers to `v0.4.3` before the tag exists.
 - The v0.4.0 runtime findings are still open and must not be treated as
   implicitly fixed by the new suite.
