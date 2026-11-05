@@ -279,6 +279,10 @@ xray log byte-identical, and the alert `internal error` rather than the
 with the upstream down; SP6-F5, miss → `404`) all passed on `hw-gz`, with the
 raw output in `.gate/release/SP6-F1.txt` … `SP6-F5.txt`.
 
+The H3 result above is historical. `deploy/Caddyfile` now pins
+`protocols h1 h2`, which removes the QUIC listener, so the current delivery
+config does not serve HTTP/3 on `:443`.
+
 What remains uncovered: UDP/QUIC layer-4 routing, which was never built;
 cascade/`upstream`, which was not exercised; any real domain or public-IP path,
 since inbound 443 is blocked at the cloud security group (a session note — see

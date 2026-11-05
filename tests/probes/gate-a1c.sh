@@ -28,7 +28,8 @@ mkdir -p "$GATE_DIR" "$REPO_ROOT/evidence"
 evidence_init "$EVID" "SP1-A1(c)" "ubuntu-latest, $(go version), caddy $CADDY_TAG (unpatched, no --replace), forwardproxy@$FWDPROXY_SHA, xcaddy@$XCADDY_VERSION"
 ev_note "this is the (c) reverse-control section of SP1-A1; the (a)(b) section is the sp1-a1 artifact"
 
-export PATH="$PATH:$(go env GOPATH)/bin"
+GOPATH_BIN="$(go env GOPATH)/bin"
+export PATH="$PATH:$GOPATH_BIN"
 go install "github.com/caddyserver/xcaddy/cmd/xcaddy@$XCADDY_VERSION" > "$GATE_DIR/a1c-xcaddy.log" 2>&1
 c5=$?
 ev_block "go install github.com/caddyserver/xcaddy/cmd/xcaddy@$XCADDY_VERSION" "$c5" "$GATE_DIR/a1c-xcaddy.log"
@@ -41,10 +42,14 @@ ev_assert "xcaddy pinned install" PASS "installed $XCADDY_VERSION, no @latest"
 
 cd "$GATE_DIR" || exit 1
 
-# Deliberately no --replace and no caddy-l4: one variable only (forwardproxy, no patch).
-CMD="xcaddy build $CADDY_TAG --with github.com/caddyserver/forwardproxy=github.com/klzgrad/forwardproxy@$FWDPROXY_SHA"
+# Deliberately no --replace and no caddy-l4: one variable only (forwardproxy, no
+# patch). The repository is this project's fork, because $FWDPROXY_SHA is the
+# fork's branch head: pointing it at the upstream repo would ask git for a
+# commit that does not exist there, and the failure would be "unknown revision"
+# instead of the missing-symbol failure this reverse control must prove.
+CMD="xcaddy build $CADDY_TAG --with github.com/caddyserver/forwardproxy=github.com/olst57/forwardproxy@$FWDPROXY_SHA"
 xcaddy build "$CADDY_TAG" \
-	--with "github.com/caddyserver/forwardproxy=github.com/klzgrad/forwardproxy@$FWDPROXY_SHA" \
+	--with "github.com/caddyserver/forwardproxy=github.com/olst57/forwardproxy@$FWDPROXY_SHA" \
 	> "$GATE_DIR/a1c-build.log" 2>&1
 c=$?
 ev_block "$CMD" "$c" "$GATE_DIR/a1c-build.log"

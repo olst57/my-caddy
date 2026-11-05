@@ -118,8 +118,10 @@ if ! grep -q 'upstream 127.0.0.1:19099' "$L4_CONF_REC"; then
 	exit 1
 fi
 
-sudo setcap cap_net_bind_service=+ep "$BIN" > "$GATE_DIR/a3-setcap.log" 2>&1
-c=$?
+# Pipe through `sudo tee` so the log is created by a privileged process, and
+# read PIPESTATUS[0] so the assertion still judges setcap, not tee.
+sudo setcap cap_net_bind_service=+ep "$BIN" 2>&1 | sudo tee "$GATE_DIR/a3-setcap.log" >/dev/null
+c=${PIPESTATUS[0]}
 ev_block "sudo setcap cap_net_bind_service=+ep $BIN" "$c" "$GATE_DIR/a3-setcap.log"
 if [ "$c" -ne 0 ]; then
 	ev_assert "cap_net_bind_service granted" FAIL "setcap failed; :443 cannot be bound unprivileged"
@@ -136,8 +138,8 @@ ev_assert "cap_net_bind_service granted" PASS "binary can bind :443 as the runne
 # last-listen.log so the evidence records which address actually listened, making a
 # false pass visible on inspection.
 wait_port() { # $1=port
-	local i line
-	for i in $(seq 1 40); do
+	local line
+	for _ in $(seq 1 40); do
 		line=$(ss -ltn 2>/dev/null | awk -v p=":$1" '$4 ~ (p "$")' | head -n1)
 		if [ -n "$line" ]; then
 			printf '%s\n' "$line" > "$GATE_DIR/last-listen.log"

@@ -1,0 +1,116 @@
+name: verify
+
+# Runs the two executable checks that the rest of the repository only describes:
+#
+#   offline  builds dist/caddy-linux-amd64 from the pinned inputs and runs
+#            scripts/verify.sh over the delivery configs (26 items).
+#   coexist  downloads that same binary and runs tests/coexist/run.sh, which
+#            starts the real stack on :443 and asserts the three roles with a
+#            control next to every assertion (CO-1..CO-7, including the
+#            HTTP/2 leg on the naive proxy hop and the absence of a QUIC
+#            listener on UDP :443).
+#
+# The two jobs are separate on purpose: the offline verifier needs nothing but
+# the binary and jq, while the coexistence test binds :443 and needs root. A
+# failure in either is a red run; neither job is allowed to be advisory.
+#
+# The coexist job talks to one external TLS endpoint ($CO_TARGET, default
+# www.apple.com:443) because the delivery config keeps forwardproxy's default
+# private-network deny in force, so a loopback target would be refused by the
+# ACL rather than tunneled. That external dependency is the only network input
+# in that job; everything else it talks to is 127.0.0.1.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  CADDY_TAG: v2.11.7
+  GO_VERSION: 1.26.x
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          # S7-18 diffs deploy/ against the v0.3.0 tag. A shallow clone or a
+          # clone without tags makes that ref missing, and the item fails
+          # closed, so a depth-1 checkout would report a false regression.
+          fetch-depth: 0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Install verifier dependencies
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends jq
+          jq --version
+      - name: Build amd64 artifact
+        run: bash scripts/build.sh --arch amd64
+      - name: Offline verifier
+        run: bash scripts/verify.sh
+      - name: Show pins
+        if: always()
+        run: cat dist/pins.txt || true
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: caddy-verify-amd64
+          path: |
+            dist/caddy-linux-amd64
+            dist/pins.txt
+          if-no-files-found: error
+
+  coexist:
+    needs: offline
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: caddy-verify-amd64
+          path: dist
+      - name: Restore exec bit
+        run: |
+          set -euo pipefail
+          # Artifact transfer drops the exec bit, and run.sh fail-closes on a
+          # non-executable binary before it starts the stack.
+          chmod +x dist/caddy-linux-amd64
+          dist/caddy-linux-amd64 version
+      - name: Install runtime test dependencies
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            curl openssl python3 iproute2
+          curl --version | head -n1
+          openssl version
+          python3 --version
+          ss -V
+      - name: Coexistence test
+        # run.sh binds :443 for the real stack, so it needs root. It refuses to
+        # start if any of 443, 19098 or 8080 is already taken.
+        run: sudo --preserve-env=CO_TARGET bash tests/coexist/run.sh "$PWD"
+      - name: Show coexistence logs
+        if: always()
+        run: |
+          for f in caddy.log stub.log backend.log site.hdr tunnel.json tunnel.err decoy.out; do
+            echo "--- $f ---"
+            tail -n 40 ".gate/coexist/$f" 2>/dev/null || true
+          done
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: coexist-logs
+          path: |
+            .gate/coexist/*.log
+            .gate/coexist/*.hdr
+            .gate/coexist/*.json
+            .gate/coexist/*.jsonl
+            .gate/coexist/*.out
+          if-no-files-found: warn

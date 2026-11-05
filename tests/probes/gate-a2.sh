@@ -41,8 +41,12 @@ ev_block "curl -V" 0 "$GATE_DIR/a2-curlv.log"
 # :443 needs the low-port capability. setcap (the approach the naive README uses)
 # is preferred over `sudo caddy run &`, because `$!` would then be sudo's PID and
 # killing it would orphan the real caddy process.
-sudo setcap cap_net_bind_service=+ep "$BIN" > "$GATE_DIR/a2-setcap.log" 2>&1
-c=$?
+# The redirect happens in the caller's shell, not in sudo's child, so a plain
+# `sudo cmd > log` would leave an unprivileged user owning the log. Pipe through
+# `sudo tee` instead, and read PIPESTATUS[0] so the assertion still judges
+# setcap's exit status rather than tee's.
+sudo setcap cap_net_bind_service=+ep "$BIN" 2>&1 | sudo tee "$GATE_DIR/a2-setcap.log" >/dev/null
+c=${PIPESTATUS[0]}
 ev_block "sudo setcap cap_net_bind_service=+ep $BIN" "$c" "$GATE_DIR/a2-setcap.log"
 if [ "$c" -ne 0 ]; then
 	ev_assert "cap_net_bind_service granted" FAIL "setcap failed; :443 cannot be bound unprivileged"

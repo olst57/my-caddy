@@ -122,11 +122,15 @@ and none is claimed to have been run.
 One binary answers on port 443 in three roles.
 
 **Site reverse proxy.** Ordinary web traffic is reverse proxied to a local site,
-and HTTP/3 is available on that path: a local HTTP/3 client was measured at
-`%{http_version}=3` with a `200` and the site's identifying header present.
+over HTTP/1.1 and HTTP/2 only. The delivery config pins `protocols h1 h2` on
+`:443`, so no QUIC listener is created and no `Alt-Svc` is advertised. HTTP/3
+was measured on this path before that pin landed; it is deliberately off now,
+because one SNI with two transport identities on one port is the coexistence
+hazard this deployment avoids.
 
-**naive proxy.** This role serves two entry points: `https://` connections
-travel over H2 and `quic://` connections over H3, both measured. `basic_auth`
+**naive proxy.** This role serves `https://` entry points, and with the pin
+above those run over H2. `quic://` was measured before the pin and is no longer
+offered, since it needs the same H3 surface the site role gives up. `basic_auth`
 is in force, and `probe_resistance` is enabled. Because of `probe_resistance`,
 an unauthenticated CONNECT is not answered with `407`; it falls through to the
 site handler as an ordinary request. What tells you whether authentication
@@ -161,9 +165,9 @@ it sees a failed handshake, and that is not a configuration error.
 **REALITY matching.** The `serverNames` and `dest` settings must match a real
 domain that resolves and serves TLS. A mismatch fails at connection time.
 
-**HTTP/3 from the public internet.** The HTTP/3 path from the public internet
-has not been exercised. Every HTTP/3 measurement so far was taken on a local
-host or inside a private network.
+**HTTP/3 is off by design.** The `protocols h1 h2` pin removes the QUIC
+listener, so HTTP/3 is not offered at all. Earlier local measurements of H3
+predate the pin and are history, not a description of the shipped config.
 
 **Byte identity across reruns.** The Go patch level floats with the runner
 cache, so `1.26.x` can land on a different patch between two runs. Two reruns of
@@ -187,10 +191,10 @@ instance, a credential, a unique identifier, or a REALITY key. Where a concrete
 value would be needed, the text either omits it or points at `deploy/` and
 `docs/`, which is where the redacted placeholders live.
 
-This document also does not claim that the arm64 artifact has been run, that
-HTTP/3 has been verified from the public internet, or that a byte-identical
-rebuild has been established. Each of those is written as not done, here and in
-the limitations above.
+This document also does not claim that the arm64 artifact has been run, or that
+a byte-identical rebuild has been established. HTTP/3 is not claimed at all:
+the delivery config turns it off. Each of those is written as not done, here
+and in the limitations above.
 
 ## Out of scope in this round
 

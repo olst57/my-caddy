@@ -62,10 +62,19 @@ ev_assert() {
 }
 
 evidence_finish() {
+	# A verdict of PASS with a recorded FAIL assertion is a contradiction, and
+	# it is the one way this library could launder a failure into green. Downgrade
+	# it here, so the per-item list and the verdict can never disagree.
+	local verdict="$1"
+	if [ "$verdict" = PASS ] && [ "$ASSERT_FAIL" -ne 0 ]; then
+		verdict=FAIL
+		printf '[备注] verdict downgraded to FAIL: an assertion in this item recorded FAIL\n' \
+			>> "$EVIDENCE_FILE"
+	fi
 	{
 		printf '[逐项]\n'
 		cat "$ASSERT_LOG"
-		printf '[判定] %s\n' "$1"
+		printf '[判定] %s\n' "$verdict"
 	} >> "$EVIDENCE_FILE"
 	if [ -n "${2:-}" ]; then
 		printf '[备注] %s\n' "$2" >> "$EVIDENCE_FILE"

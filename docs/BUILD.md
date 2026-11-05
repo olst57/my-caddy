@@ -28,9 +28,12 @@ from its run — for this slice, **run 41069346485** on
 the `caddy-linux` artifact from that run before running any check that needs the
 binary.
 
-The `build` workflow builds and checksums the artifacts. It does **not** run
-`scripts/verify.sh`; no committed workflow does. The verifier was run manually
-on ubuntu-latest in a GitHub Codespace against this artifact. See
+The `build` workflow builds and checksums the artifacts and does not run
+`scripts/verify.sh`; the separate `verify` workflow
+(`.github/workflows/verify.yml`) does. It builds amd64, runs the offline
+verifier, then runs `tests/coexist/run.sh` against that same binary on
+`ubuntu-latest`. The historical verifier runs were manual, on ubuntu-latest in
+a GitHub Codespace and on `hw-gz`. See
 `docs/VERIFY.md` for the provenance of that run and for the `chmod +x`
 requirement. The reproducibility limit is stated there as well; its evidence
 entry (D-5) is in `.gate/release/DEVIATIONS.md`, which is gitignored and not part
@@ -194,9 +197,17 @@ existed at that time. `docs/VERIFY.md` states it and the transcript records it.
 For v0.2.1 the whole verifier was re-run on `hw-gz` after the S3-9 assertion
 changed, against the same binary by sha256, and again printed `VERIFY: PASS`;
 that run and its log are described in `docs/VERIFY.md`. The item set has since
-grown: `scripts/verify.sh` now declares `EXPECTED_ITEMS=24`, and
-`docs/VERIFY.md` lists all 24 IDs. No CI job runs the verifier, so both runs are
-manual and neither is re-executable from the repository alone.
+grown: `scripts/verify.sh` now declares `EXPECTED_ITEMS=26`, and
+`docs/VERIFY.md` lists all 26 IDs. `scripts/verify.sh` now runs in CI on every
+push and pull request, so a regression is caught by the repository's own
+workflow rather than by a manual run.
+
+The hygiene gates read the **work tree**, not the index: `git grep --untracked`
+is used for the credential, UUID, hostname and placeholder scans, so a new file
+is checked before it is committed rather than after. It still honours
+`.gitignore`, which keeps `dist/`, `.build/`, `.gate/` and `.env` out of the
+scan. This was not cosmetic: `tests/coexist/` was added as untracked files, and
+the previous tracked-only scan had never looked at them at all.
 
 ## A fact that bites certificate checks
 
