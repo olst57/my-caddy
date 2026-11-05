@@ -108,7 +108,7 @@
 	# This handler sits AFTER forward_proxy because of the global `order` pin
 	# above. Anything forward_proxy does not consume as a proxy request falls
 	# through to here, which is what makes the site servable next to naive.
-	reverse_proxy 127.0.0.1:8080
+	reverse_proxy 127.0.0.1:8081
 }
 
 # B is isolated in its own site block and answers 404. It is the local
