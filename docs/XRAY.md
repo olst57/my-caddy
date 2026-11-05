@@ -75,6 +75,32 @@ Replace, in order:
 The full register, including the naive side's credentials, is
 `deploy/PLACEHOLDERS.md`.
 
+## REALITY preflight
+
+The skeleton ships a placeholder REALITY identity, and that pair is not
+runnable. The v0.4.0 acceptance run measured `alert 40` with the shipped
+`serverNames=["b.test"]` and `dest=example.com:443`: the tunnel came up and the
+destination refused the handshake, because `example.com` does not serve a
+certificate for the SNI `b.test`.
+
+Replacing the hostname is therefore a three-position change, not a one-line
+edit. All three must be replaced together and must end up equal:
+
+1. `deploy/Caddyfile` — the `layer4` matcher `@reality tls sni b.test`
+2. `deploy/xray/config.json` — `realitySettings.serverNames[0]`
+3. `deploy/Caddyfile` — the `b.test { ... }` site block address
+
+`realitySettings.dest` is a separate position with its own rule: it must be a
+real, reachable TLS endpoint that accepts the SNI you chose. Replacing
+`serverNames` without replacing `dest` is exactly the `alert 40` failure above
+— the configuration validates, the connection is forwarded, and the
+destination rejects it.
+
+After all four positions change, prove the pair with a handshake through the
+tunnel before claiming the REALITY role works. A validating config is not that
+proof: the shipped placeholder pair validates today and still fails at
+connection time.
+
 ## Verification that was actually performed
 
 These are `jq` checks against the skeleton. They are static: they parse JSON and
@@ -201,7 +227,7 @@ lineage and the security-group reading are likewise uncaptured. See
 | 1 | `deploy/xray/config.json:34` | `inbounds[0].streamSettings.sockopt.acceptProxyProtocol` | `true` |
 | 2 | `deploy/Caddyfile:39` | layer4 `proxy_protocol` | `v2` |
 | 3 | `deploy/Caddyfile:42` | layer4 `upstream` | `127.0.0.1:19098` = `config.json:8` port |
-| 4 | `deploy/Caddyfile:32` | `@reality tls sni` | `b.test` = `config.json:23` serverNames |
+| 4 | `deploy/Caddyfile:50` | `@reality tls sni` | `b.test` = `config.json:23` serverNames |
 | 5 | `deploy/xray/config.json:30` | `realitySettings.dest` | `example.com:443`, placeholder |
 | 6 | `deploy/xray/config.json:7` | `inbounds[0].listen` | `127.0.0.1` |
 

@@ -32,6 +32,11 @@
 #                       this asserts the stronger claim the config makes -- the
 #                       QUIC listener is never created. The TCP half is the
 #                       control: a dead Caddy also has no UDP listener.
+#   CO-8  decoy≠target  the `probe_resistance` domain must differ from the host
+#                       the tunnel is asked to reach. In v0.4.0 they were the
+#                       same host and the tunnelled request died with code=000 /
+#                       CURL_EXIT=35, because the decoy answered instead of a
+#                       tunnel. Equal or empty values fail the item.
 #
 # The overlay Caddyfile is DERIVED from deploy/Caddyfile by substituting the two
 # credential placeholders and nothing else; the script proves that by reversing
@@ -49,6 +54,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CADDY_BIN="${CADDY_BIN:-$REPO_ROOT/dist/caddy-linux-amd64}"
 WORKDIR="${WORKDIR:-$REPO_ROOT/.gate/coexist}"
 TARGET="${CO_TARGET:-www.apple.com:443}"
+TARGET_HOST="${TARGET%%:*}"
 TIMEOUT="${CO_TIMEOUT:-25}"
 
 USER_TOKEN="coexist-user-$RANDOM"
@@ -114,6 +120,14 @@ wait_records() {
 
 port_busy() {
 	ss -ltn 2>/dev/null | grep -q ":$1 "
+}
+
+# Print the first argument of the active probe_resistance directive, or nothing.
+# Comment prose above the directive also mentions the keyword, so strip comments
+# before matching; a line that is only a comment must never be parsed.
+decoy_domain() {
+	sed -e 's/#.*$//' "$REPO_ROOT/deploy/Caddyfile" |
+		awk '$1 == "probe_resistance" { print $2; exit }'
 }
 
 # ------------------------------------------------------------------ preflight
@@ -364,8 +378,21 @@ if [ "$quic_ok" -eq 1 ]; then item CO-7 PASS; else
 	printf '  udp443=[%s]\n' "$(printf '%s' "$quic_udp" | tr '\n' ';')" >&2
 fi
 
+# CO-8: the decoy and the target must be different hosts. Equality is the
+# v0.4.0 failure mode, and an unparsed value must fail rather than pass by
+# default, so both sides are required to be non-empty first.
+DECOY_HOST="$(decoy_domain)"
+DECOY_LOWER="$(printf '%s' "$DECOY_HOST" | tr '[:upper:]' '[:lower:]')"
+TARGET_LOWER="$(printf '%s' "$TARGET_HOST" | tr '[:upper:]' '[:lower:]')"
+if [ -n "$DECOY_LOWER" ] && [ -n "$TARGET_LOWER" ] && [ "$DECOY_LOWER" != "$TARGET_LOWER" ]; then
+	item CO-8 PASS
+else
+	item CO-8 FAIL
+	printf '  probe_resistance=[%s] target=[%s]\n' "$DECOY_HOST" "$TARGET_HOST" >&2
+fi
+
 # ------------------------------------------------------------------- verdict
-if [ "$FAILED" -eq 0 ] && [ "$PASSED" -eq 7 ]; then
+if [ "$FAILED" -eq 0 ] && [ "$PASSED" -eq 8 ]; then
 	printf 'COEXIST: PASS\n'
 	exit 0
 fi

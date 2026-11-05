@@ -601,7 +601,24 @@ directive and nothing else:
 The mutation run printed `CO-1` through `CO-6` PASS and `CO-7 FAIL`, and the
 failure message carried both socket lines, so the diagnosis names the listener
 rather than the header. The file was restored and the suite returned to
-`COEXIST: PASS` with seven items.
+`COEXIST: PASS` with the item set as it stood then; CO-8 did not exist yet.
+
+### The decoy must not be the tunnel target
+
+`probe_resistance example.com` answers probes with the decoy page. When the
+tunnel is asked to reach that same host, the decoy answers the tunnelled
+request and the CONNECT fails with `code=000` / `CURL_EXIT=35`. The v0.4.0
+acceptance run measured exactly that, and the symptom looked like a broken
+proxy rather than a configuration collision between two values in one file.
+
+CO-8 makes the collision a red item. It reads the active `probe_resistance`
+directive from `deploy/Caddyfile` with comments stripped, so the prose that
+mentions the keyword above the directive is never parsed; it compares the value
+case-insensitively against the host part of `CO_TARGET`; and it FAILs when the
+two are equal **or** when either side is empty. The empty half matters because
+a parser that returned nothing for both sides would pass a plain equality
+check. The failure line prints both values, so the diagnosis names the
+collision instead of saying "mismatch".
 
 ### An acl-denied CONNECT also answers 200 OK, then closes
 
@@ -649,6 +666,25 @@ the whole claim, and U1 is closed only to that extent: this is not evidence that
 a secret path resists probing in general, and nothing here says what another
 client or another probe set would see. Measured in `.gate/release/SP4-D6.txt`;
 not re-run in v0.2.1. The delivery config keeps the form it already has.
+
+### The REALITY default pair is a placeholder pair
+
+`deploy/xray/config.json` ships `serverNames=["b.test"]` together with
+`dest=example.com:443`, and that pair is not a working REALITY identity. The
+v0.4.0 acceptance run measured `alert 40` against it: the tunnel formed and the
+destination rejected the handshake, because it does not serve a certificate for
+the SNI `b.test`. Substituting a destination that accepted the SNI made the
+same topology answer once, and that single measurement is all it is — it is not
+a PASS for the shipped defaults.
+
+The delivery skeleton therefore stays placeholder-only. `deploy/PLACEHOLDERS.md`
+and `docs/XRAY.md` carry the rule: the three `b.test` positions and
+`realitySettings.dest` must be replaced together before deployment. S3-11
+asserts only that the Caddy matcher and the xray `serverNames` agree, which the
+placeholder pair does; it does not assert that any destination accepts the SNI.
+A handshake through the tunnel against the replacement destination is the
+precondition for claiming the REALITY role works, and no item in this set
+performs that handshake.
 
 ### An unauthenticated CONNECT is not answered 407
 
