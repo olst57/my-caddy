@@ -1,0 +1,9 @@
+# v0.4.3 CI run record
+pull_request=https://github.com/olst57/my-caddy/pull/1
+run=42049087626 commit=75bd95a offline=success coexist=success items=7
+run=42049780180 commit=c3bfa71 offline=success coexist=success items=7
+run=42050480095 commit=ddc493a offline=success coexist=success items=7
+run=42054615674 commit=d3b4f67 offline=success coexist=success items=8
+run=42056371420 commit=466b977 offline=success coexist=success items=8
+control=42052579628 offline=failure coexist=skipped
+control=42053168208 offline=success coexist=failure

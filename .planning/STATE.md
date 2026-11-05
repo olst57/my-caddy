@@ -5,8 +5,8 @@ progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 8
-  completed_plans: 3
-  percent: 38
+  completed_plans: 6
+  percent: 75
 ---
 
 # Project State
@@ -21,9 +21,9 @@ See: .planning/PROJECT.md (updated 2026-11-05)
 
 ## Current Position
 
-Phase: 2 of 3 (Close runtime acceptance) — complete
-Plan: 3 of 3 — 02-01, 02-02 and 02-03 complete under option A
-Status: Ready for Phase 3; publishing needs merge and tag permission
+Phase: 3 of 3 (Publish v0.4.3) — 03-02 executed, 03-01 awaiting permission
+Plan: 2 of 2 executed out of order — the archive was built before the tag
+Status: Publishing needs merge of pull request #1 and tag permission
 Last activity: 2026-11-05 — 02-01 recorded `option-a` in `docs/XRAY.md` and
 `docs/VERIFY.md`; 02-02 added CO-8 and moved the verdict to eight items; 02-03
 wrote `.gate/v043/RTA-DISPOSITIONS.md` (2 fixed, 5 documented, 2 deferred) and
@@ -32,7 +32,7 @@ plans ask for were reverted because S7-18 freezes `deploy/` at v0.3.0 apart
 from the protocol pin. Option A was applied as the least-loss default: the
 freeze is untouched and the missing register rows are documented deviations.
 
-Progress: [████░░░░░░] 38%
+Progress: [███████░░░] 75%
 
 ## Performance Metrics
 
@@ -47,7 +47,7 @@ Progress: [████░░░░░░] 38%
 |-------|-------|-------|----------|
 | 1. Freeze the verification gate | 2 | 3 | 12min |
 | 2. Close runtime acceptance | 3 | 3 | 27min |
-| 3. Publish v0.4.3 | 0 | 2 | - |
+| 3. Publish v0.4.3 | 1 | 2 | 40min |
 
 **Recent Trend:**
 - Last 5 plans: none
