@@ -5,8 +5,8 @@ progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 8
-  completed_plans: 1
-  percent: 13
+  completed_plans: 2
+  percent: 25
 ---
 
 # Project State
@@ -22,17 +22,18 @@ See: .planning/PROJECT.md (updated 2026-11-05)
 ## Current Position
 
 Phase: 1 of 3 (Freeze the verification gate)
-Plan: 1 of 3 in current phase — 01-01 complete
-Status: Ready to execute 01-02
-Last activity: 2026-11-05 — 01-01 committed the verification slice as
-`05e954b`; static checks passed; no Linux runtime available locally.
+Plan: 2 of 3 in current phase — 01-02 executed, checkpoint pending
+Status: Awaiting human confirmation that the hw-gz evidence is attributable
+Last activity: 2026-11-05 — 01-02 ran both suites on `hw-gz`
+(`hcss-ecs-94ac`) against binary `1a9115…2624`: `VERIFY: PASS` with 26 items,
+`COEXIST: PASS` with 7 items.
 
-Progress: [█░░░░░░░░░] 13%
+Progress: [███░░░░░░░] 25%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
+- Total plans completed: 2
 - Average duration: not recorded
 - Total execution time: not recorded
 
@@ -40,7 +41,7 @@ Progress: [█░░░░░░░░░] 13%
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 1. Freeze the verification gate | 1 | 3 | - |
+| 1. Freeze the verification gate | 2 | 3 | 12min |
 | 2. Close runtime acceptance | 0 | 3 | - |
 | 3. Publish v0.4.3 | 0 | 2 | - |
 
@@ -65,18 +66,16 @@ affecting current work:
 
 ### Pending Todos
 
-- Run 01-02 on a Linux host with root; this Windows host has no WSL or Docker.
+- Push `feat/protocol-pin` and confirm both CI jobs for 01-03.
 - Decide whether `v0.4.3` ships from `feat/protocol-pin` merged to `main` or
   from a dedicated release branch.
-- Confirm which Linux host will run the coexistence suite and record its
-  identity with the result.
+- Decide the REALITY placeholder posture at the 02-01 checkpoint.
 
 ### Blockers/Concerns
 
 - The verification slice is committed on `feat/protocol-pin` but not merged to
   `main`; `main` cannot reproduce the gate yet.
-- The local Windows host cannot execute the Linux ELF or bind `:443` for the
-  coexistence suite.
+- `hw-gz` cannot reach GitHub, so CI cannot be observed from that host.
 - `docs/VERIFY.md` already refers to `v0.4.3` before the tag exists.
 - The v0.4.0 runtime findings are still open and must not be treated as
   implicitly fixed by the new suite.
@@ -92,5 +91,6 @@ affecting current work:
 ## Session Continuity
 
 Last session: 2026-11-05
-Stopped at: 01-01 complete (`05e954b`); 01-02 needs a Linux host with root.
-Resume file: None
+Stopped at: 01-02 evidence captured under `.gate/v043/`; the human checkpoint
+in 01-02 Task 4 has not been answered.
+Resume file: .planning/phases/01-freeze-verification-gate/01-02-SUMMARY.md
