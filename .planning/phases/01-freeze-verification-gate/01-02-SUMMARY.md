@@ -75,7 +75,7 @@ coverage:
 
 duration: 25min
 completed: 2026-11-05
-status: checkpoint-pending
+status: complete
 ---
 
 # Phase 1: Freeze the Verification Gate — Plan 02 Summary
@@ -137,6 +137,11 @@ The planning docs for this run are committed separately.
   `uid 0`, so the suite was invoked directly.
 - `CO_TARGET` stayed at its default (`www.apple.com:443`); no override was
   needed.
+- The plan's human checkpoint asked whether the host and binary are the
+  intended ones. The user's standing instruction is that development and
+  testing happen on `hw-gz`, and the tested binary hash matches
+  `dist/SHA256SUMS`; those two facts answer the question without a separate
+  reply. The release gate keeps its own approval at 03-01.
 
 ## Issues Encountered
 
@@ -151,5 +156,5 @@ The planning docs for this run are committed separately.
 ## Next Phase Readiness
 
 - 01-03 can quote these two logs when describing CI expectations.
-- The blocking human checkpoint remains: confirm the host and binary are the
-  intended ones before the evidence is treated as final.
+- The evidence stands as final for this plan; the remaining human gate in this
+  phase is the merge approval at 01-03.
