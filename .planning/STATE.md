@@ -22,11 +22,12 @@ See: .planning/PROJECT.md (updated 2026-11-05)
 ## Current Position
 
 Phase: 1 of 3 (Freeze the verification gate)
-Plan: 2 of 3 in current phase — 01-02 executed, checkpoint pending
-Status: Awaiting human confirmation that the hw-gz evidence is attributable
-Last activity: 2026-11-05 — 01-02 ran both suites on `hw-gz`
-(`hcss-ecs-94ac`) against binary `1a9115…2624`: `VERIFY: PASS` with 26 items,
-`COEXIST: PASS` with 7 items.
+Plan: 3 of 3 in current phase — 01-03 executed, merge approval pending
+Status: Awaiting approval to merge pull request #1
+Last activity: 2026-11-05 — 01-03 opened
+<https://github.com/olst57/my-caddy/pull/1>; runs 42049087626 (`75bd95a`) and
+42049780180 (`c3bfa71`) both finished `offline` and `coexist` green, and the
+docs cite the first run instead of predicting CI.
 
 Progress: [███░░░░░░░] 25%
 
@@ -67,15 +68,14 @@ affecting current work:
 ### Pending Todos
 
 - Push `feat/protocol-pin` and confirm both CI jobs for 01-03.
-- Decide whether `v0.4.3` ships from `feat/protocol-pin` merged to `main` or
-  from a dedicated release branch.
+- Merge pull request #1 once approved.
 - Decide the REALITY placeholder posture at the 02-01 checkpoint.
 
 ### Blockers/Concerns
 
 - The verification slice is committed on `feat/protocol-pin` but not merged to
   `main`; `main` cannot reproduce the gate yet.
-- `hw-gz` cannot reach GitHub, so CI cannot be observed from that host.
+- `hw-gz` cannot reach GitHub, so CI is observed from the authoring host.
 - `docs/VERIFY.md` already refers to `v0.4.3` before the tag exists.
 - The v0.4.0 runtime findings are still open and must not be treated as
   implicitly fixed by the new suite.
@@ -91,6 +91,6 @@ affecting current work:
 ## Session Continuity
 
 Last session: 2026-11-05
-Stopped at: 01-02 evidence captured under `.gate/v043/`; the human checkpoint
-in 01-02 Task 4 has not been answered.
-Resume file: .planning/phases/01-freeze-verification-gate/01-02-SUMMARY.md
+Stopped at: pull request #1 is green and unmerged; 01-03 Task 4 asks for merge
+approval, and 02-01 asks for the REALITY placeholder decision.
+Resume file: .planning/phases/01-freeze-verification-gate/01-03-SUMMARY.md
