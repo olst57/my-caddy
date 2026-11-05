@@ -175,7 +175,7 @@ UPSTREAM_OUT="$WORKDIR/upstream.jsonl" setsid python3 "$HERE/stub-upstream.py" \
 	>"$WORKDIR/stub.log" 2>&1 </dev/null &
 STUB_PID=$!
 
-WEB_PORT=8080 setsid python3 "$HERE/site-backend.py" >"$WORKDIR/backend.log" 2>&1 </dev/null &
+WEB_PORT=8099 setsid python3 "$HERE/site-backend.py" >"$WORKDIR/backend.log" 2>&1 </dev/null &
 BACKEND_PID=$!
 
 ready=0
