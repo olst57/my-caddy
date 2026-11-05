@@ -54,13 +54,13 @@ FAILED=0
 PASSED=0
 # Self-consistency invariant (SPEC v0.4.0-SP7 A.3 / B.5): the number of unique
 # `emit S*-*` IDs in this file. Kept next to the items it counts on purpose.
-EXPECTED_ITEMS=24
-# The explicit ID set behind that number (SPEC A.3). S3-1..S3-11 and
+EXPECTED_ITEMS=26
+# The explicit ID set behind that number (SPEC A.3). S3-1..S3-13 and
 # S7-1..S7-8 and S7-12..S7-15 and S7-18 emit; S7-9, S7-10, S7-11, S7-16 and
 # S7-17 are script-external meta entries and deliberately never appear here —
 # S7-11 in particular is the entry that *describes* this list, so emitting it
 # would be circular.
-ITEM_LIST='S3-1 S3-2 S3-3 S3-4 S3-5 S3-6 S3-7 S3-8 S3-9 S3-10 S3-11
+ITEM_LIST='S3-1 S3-2 S3-3 S3-4 S3-5 S3-6 S3-7 S3-8 S3-9 S3-10 S3-11 S3-12 S3-13
 S7-1 S7-2 S7-3 S7-4 S7-5 S7-6 S7-7 S7-8
 S7-12 S7-13 S7-14 S7-15 S7-18'
 EMITTED_IDS=""
@@ -387,6 +387,212 @@ else
 fi
 rm -f "$unpaired"
 
+# ---------------------------------------------------------------- S3-12
+# Protocol surface pin: the delivery config must DECLARE `protocols h1 h2`
+# explicitly, and the adapted :443 server must carry exactly h1 and h2 with no
+# h3 anywhere. This closes the gap MC-P6-2 measured: with that line deleted,
+# `caddy adapt` still exits 0, the server carries no `protocols` key at all, and
+# every one of the other items still passes -- so the pin can vanish silently.
+#
+# Two legs, because they fail differently:
+#
+#   1. DECLARATION, read from $CADDYFILE itself. Comment lines and trailing
+#      comments are stripped first, so the prose above the directive (which
+#      names h3 several times) can neither satisfy nor trip this check. The
+#      surviving token sequence must be exactly `protocols h1 h2`, and no
+#      surviving token may be `h3`.
+#   2. SEMANTICS, read from the adapted JSON. Every server listening on :443
+#      must report protocols == ["h1","h2"]. An ABSENT `protocols` key is NOT
+#      "unset and therefore fine": Caddy substitutes the compiled default
+#      {"h1","h2","h3"} (modules/caddyhttp/server.go defaultProtocols), so an
+#      absent key is treated as h1 h2 h3 and FAILs here. That is what makes this
+#      item sensitive to deleting the line rather than merely to editing it.
+#
+# No h3 means no QUIC listener on :443 and therefore no Alt-Svc advertisement on
+# HTTP/1.1 or HTTP/2 responses -- the coexistence hazard this deployment avoids.
+# The negative direction (line deleted => this item, and only this item, FAILs)
+# is a one-off acceptance probe, not a resident mutation control (G4).
+s12_ok=1
+s12_why=""
+s12_decl=$(awk '
+	{
+		line = $0
+		sub(/[[:space:]]*#.*$/, "", line)
+		gsub(/[[:space:]]+/, " ", line)
+		sub(/^ /, "", line)
+		sub(/ $/, "", line)
+		if (line == "protocols h1 h2") print NR
+	}' "$CADDYFILE")
+if [ -z "$s12_decl" ]; then
+	s12_ok=0
+	s12_why="$s12_why
+  missing: no explicit \"protocols h1 h2\" directive line in $CADDYFILE"
+fi
+s12_h3=$(awk '
+	{
+		line = $0
+		sub(/[[:space:]]*#.*$/, "", line)
+		n = split(line, tok, /[[:space:]]+/)
+		for (i = 1; i <= n; i++) if (tok[i] == "h3") { print NR; break }
+	}' "$CADDYFILE")
+if [ -n "$s12_h3" ]; then
+	s12_ok=0
+	s12_h3_lines=$(printf '%s' "$s12_h3" | tr '\n' ' ')
+	s12_why="$s12_why
+  h3 present: line(s) ${s12_h3_lines% } of $CADDYFILE carry the h3 token, so h3 is enabled"
+fi
+s12_adapt=$(jq -r '
+	[ .apps.http.servers[]
+		| select((.listen // []) | index(":443"))
+		| (if (.protocols // null) == null then ["h1","h2","h3"] else .protocols end) ]
+	| if length == 0 then "NOSERVER"
+	  elif ([ .[] | select(. == ["h1","h2"]) ] | length) == length then "OK"
+	  else (map(join(",")) | join(";")) end' "$ADAPTED")
+if [ "$s12_adapt" != OK ]; then
+	s12_ok=0
+	s12_why="$s12_why
+  wrong protocols: adapted :443 server reports protocols=$s12_adapt (want exactly h1,h2; an absent key means the compiled default h1,h2,h3)"
+fi
+if [ "$s12_ok" -eq 1 ]; then
+	emit S3-12 PASS
+else
+	emit S3-12 FAIL
+	printf '%s\n' "$s12_why" >&2
+fi
+
+# ---------------------------------------------------------------- S3-13
+# The naive endpoint must be AUTHENTICATED and must keep its probe_resistance
+# decoy. Both clauses are read from the adapted JSON, i.e. from what Caddy
+# would actually run, not from the text of the Caddyfile.
+#
+# Why this item exists. Measured on the built binary, there are three
+# single-directive deletions and they fail differently:
+#
+#   * delete `basic_auth` alone  -> `caddy validate` FAILS with "probe
+#     resistance requires authentication", so S3-2 already catches it;
+#   * delete `probe_resistance` alone -> `caddy validate` PASSES, and no other
+#     offline item notices: the config is authenticated but has lost its decoy;
+#   * delete BOTH -> `caddy validate` and `caddy adapt` exit 0, every one of the
+#     other 25 items still PASSES, and the running endpoint answers an
+#     unauthenticated CONNECT with `200` and opens a tunnel to the target.
+#
+# The last case is an OPEN PROXY that the offline verifier used to call green,
+# and the middle case is a silent loss of the decoy. One item asserts both keys
+# so neither shape can pass, and so the open-proxy shape cannot hide behind the
+# other key still being present.
+#
+# The property is a conjunction of three things:
+#
+#   1. exactly ONE forward_proxy handler (the naive role exists, and it is not
+#      duplicated into some other server);
+#   2. that handler carries `auth_credentials` as a non-empty array -- Caddy's
+#      compiled form of `basic_auth`. An ABSENT key is not "no policy", it is
+#      "no credentials required", so absent FAILs here;
+#   3. that handler carries `probe_resistance` with a non-empty `domain`. The
+#      decoy is the behaviour CO-5 tests at runtime; without it an
+#      unauthenticated probe is answered by the site handler instead, and the
+#      naive role becomes a distinguishable, authenticatable open relay.
+#
+# Mutation control (G4). A green assertion over one document proves nothing on
+# its own: a filter that matches nothing, or a filter that matches everything,
+# produces the same green. So the SAME filter is re-run over three mutations of
+# the adapted JSON -- auth deleted, probe_resistance deleted, both deleted --
+# and every one of them MUST come back false. The mutations are made in
+# $WORKDIR, never in the repository.
+#
+# Each mutation is also checked for LANDING, semantically and not by `cmp`:
+# after the deletion the key must be absent from every forward_proxy object,
+# while the forward_proxy object itself must still be there. A byte comparison
+# would be useless here, because `caddy adapt` writes compact JSON and jq
+# pretty-prints it, so two files always differ even when nothing was deleted.
+# Without the landing check a broken `del()` would leave the document intact,
+# the filter would (correctly) still pass, and the control would report green
+# while testing nothing.
+#
+# Negative direction observed once by hand (not resident): with both directives
+# removed from the Caddyfile, this item and only this item FAILs. See
+# docs/VERIFY.md.
+s13_filter='
+	([.. | objects | select(.handler? == "forward_proxy")] | length == 1)
+	and ([.. | objects | select(.handler? == "forward_proxy")
+		| (.auth_credentials? // empty)
+		| select(type == "array" and length >= 1)
+		| select(all(.[]; (type == "string" and length > 0)
+			or (type == "array" and length >= 1)))]
+		| length == 1)
+	and ([.. | objects | select(.handler? == "forward_proxy")
+		| (.probe_resistance? // empty)
+		| select(type == "object" and ((.domain? // "") | length) > 0)]
+		| length == 1)
+'
+s13_ok=1
+s13_why=""
+
+if ! jq -e "$s13_filter" "$ADAPTED" >/dev/null 2>&1; then
+	s13_ok=0
+	s13_why="$s13_why
+  the delivery config does not require authentication on the naive endpoint
+  (need exactly one forward_proxy with non-empty auth_credentials and a
+  probe_resistance domain); an unauthenticated CONNECT would be tunnelled"
+fi
+
+# jq program that strips one or both naive security keys from every
+# forward_proxy object. Written once and parameterised, so the control and the
+# item cannot drift apart.
+s13_strip() { # $1=outfile $2...=keys to delete
+	local out="$1"
+	shift
+	local keys
+	keys=$(printf '%s, ' "$@" | sed 's/, $//')
+	jq --arg keys "$keys" '
+		walk(if type == "object" and (.handler? == "forward_proxy")
+			then del(.[($keys | split(", "))[]])
+			else . end)
+	' "$ADAPTED" >"$out" 2>/dev/null
+}
+
+for s13_case in auth probe both; do
+	case "$s13_case" in
+	auth) s13_keys="auth_credentials" ;;
+	probe) s13_keys="probe_resistance" ;;
+	both) s13_keys="auth_credentials probe_resistance" ;;
+	esac
+	s13_mut="$WORKDIR/s13-$s13_case.json"
+	# shellcheck disable=SC2086 # deliberate word splitting: one key per argument
+	if ! s13_strip "$s13_mut" $s13_keys; then
+		s13_ok=0
+		s13_why="$s13_why
+  S3-13 control ($s13_case): could not build the mutated document"
+		continue
+	fi
+	s13_landing=$(jq -r --arg keys "$s13_keys" '
+		[.. | objects | select(.handler? == "forward_proxy")] as $fp
+		| ($fp | length) as $n
+		| ([$fp[] as $o | ($keys | split(", "))[] as $k | select($o | has($k))] | length) as $left
+		| "\($n) \($left)"' "$s13_mut" 2>/dev/null)
+	if [ "$s13_landing" != "1 0" ]; then
+		s13_ok=0
+		s13_why="$s13_why
+  S3-13 control ($s13_case): mutation did not land (want \"1 0\" =
+  one forward_proxy with none of $s13_keys left; got \"${s13_landing:-<jq failed>}\")"
+		continue
+	fi
+	if jq -e "$s13_filter" "$s13_mut" >/dev/null 2>&1; then
+		s13_ok=0
+		s13_why="$s13_why
+  S3-13 control ($s13_case): the check still passes with $s13_keys removed,
+  so it is not sensitive to the open-proxy shape"
+	fi
+done
+
+if [ "$s13_ok" -eq 1 ]; then
+	emit S3-13 PASS
+else
+	emit S3-13 FAIL
+	printf '%s\n' "$s13_why" >&2
+	jq -c '[.. | objects | select(.handler? == "forward_proxy")]' "$ADAPTED" >&2
+fi
+
 # ---------------------------------------------------------------- S7-1
 if git ls-files --error-unmatch .env >/dev/null 2>&1; then
 	emit S7-1 FAIL
@@ -402,7 +608,7 @@ else
 fi
 
 # ---------------------------------------------------------------- S7-2
-uuid_hits=$(git grep -nE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' \
+uuid_hits=$(git grep --untracked -nE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' \
 	-- . 2>/dev/null)
 if [ -z "$uuid_hits" ]; then
 	emit S7-2 PASS
@@ -428,7 +634,9 @@ else
 fi
 
 # ---------------------------------------------------------------- S7-4
-host_set=$(git grep -hoE '[A-Za-z0-9._-]+\.(test|com|net|io|org)' \
+# `--untracked` for the same reason as S7-13: a new file in deploy/ must be
+# checked before it is committed, not after.
+host_set=$(git grep --untracked -hoE '[A-Za-z0-9._-]+\.(test|com|net|io|org)' \
 	-- deploy/ ':!deploy/PLACEHOLDERS.md' 2>/dev/null | sort -u)
 if diff <(printf '%s\n' "$host_set") \
 	<(printf '%s\n' a.test b.test example.com | sort -u) >/dev/null 2>&1; then
@@ -439,9 +647,9 @@ else
 fi
 
 # ---------------------------------------------------------------- S7-5
-tok_deploy=$(git grep -hoE '<[A-Z_]+>' -- deploy/ ':!deploy/PLACEHOLDERS.md' \
+tok_deploy=$(git grep --untracked -hoE '<[A-Z_]+>' -- deploy/ ':!deploy/PLACEHOLDERS.md' \
 	2>/dev/null | sort -u)
-tok_register=$(git grep -hoE '<[A-Z_]+>' -- deploy/PLACEHOLDERS.md 2>/dev/null | sort -u)
+tok_register=$(git grep --untracked -hoE '<[A-Z_]+>' -- deploy/PLACEHOLDERS.md 2>/dev/null | sort -u)
 if diff <(printf '%s\n' "$tok_deploy") <(printf '%s\n' "$tok_register") \
 	>/dev/null 2>&1; then
 	emit S7-5 PASS
@@ -510,7 +718,7 @@ else
 fi
 
 # ---------------------------------------------------------------- S7-12
-# G1: no live-looking credential may exist in the tracked tree. The three
+# G1: no live-looking credential may exist in the work tree. The three
 # patterns are the ones published verbatim in SPEC v0.4.0-SP7 B.1. POSIX ERE
 # has no shorthand whitespace class, so `[[:space:]]` is used throughout, and
 # the credential pattern is matched case-insensitively because an all-uppercase
@@ -594,15 +802,15 @@ fi
 
 g1_hits=""
 for g1_p in "$g1_p1" "$g1_p2"; do
-	g1_hits="$g1_hits$(git grep -nE "$g1_p" -- . 2>/dev/null)"
+	g1_hits="$g1_hits$(git grep --untracked -nE "$g1_p" -- . 2>/dev/null)"
 done
-g1_hits="$g1_hits$(git grep -niE "$g1_p3" -- . 2>/dev/null)"
+g1_hits="$g1_hits$(git grep --untracked -niE "$g1_p3" -- . 2>/dev/null)"
 if [ "$g1_bad" -eq 0 ] && [ -z "$g1_hits" ]; then
 	emit S7-12 PASS
 else
 	emit S7-12 FAIL
 	if [ -n "$g1_hits" ]; then
-		printf '  credential-shaped material in the tracked tree:\n%s\n' "$g1_hits" >&2
+		printf '  credential-shaped material in the work tree:\n%s\n' "$g1_hits" >&2
 	fi
 	if [ "$g1_bad" -ne 0 ]; then
 		printf '  G1 regex self-test failed (see the mismatches above)\n' >&2
@@ -619,7 +827,21 @@ if [ ! -f docs/REDACTION.md ]; then
 	printf '  docs/REDACTION.md is missing\n' >&2
 else
 	s13_allow=$(grep -E '^\[C[123]\] ' docs/REDACTION.md | cut -d' ' -f2 | sort -u)
-	s13_tree=$(git grep -hoE '[A-Za-z0-9][A-Za-z0-9.-]*\.(test|com|net|org|io)(/[A-Za-z0-9._-]+)?' \
+	# `--untracked` is deliberate. A plain `git grep` reads the INDEX, so a
+	# file that is new and not yet staged is invisible to this gate: it would
+	# be scanned for the first time only after it was committed. That is the
+	# wrong moment to discover an operational hostname. `--untracked` reads
+	# the work tree and still honours .gitignore, so `dist/`, `.build/`,
+	# `.gate/` and `.env` (local state and secrets) stay out of the scan
+	# while every file that is about to be committed is in it.
+	#
+	# The trailing `\b` stops the match from running past a word boundary.
+	# Measured: without it, Python source `self.command` is extracted as the
+	# host `self\.com`, which is not a host at all and cannot be allow-listed
+	# honestly. With it, `self.command` yields nothing while `self\.com`,
+	# `go.uber.org/zap` and `a.test:443` still match. The dots in this comment
+	# are escaped because this file is itself scanned by the extractor.
+	s13_tree=$(git grep --untracked -hoE '[A-Za-z0-9][A-Za-z0-9.-]*\.(test|com|net|org|io)\b(/[A-Za-z0-9._-]+)?' \
 		-- . 2>/dev/null | sort -u)
 	s13_missing=$(comm -23 <(printf '%s\n' "$s13_tree") <(printf '%s\n' "$s13_allow"))
 	if [ -n "$s13_missing" ]; then
@@ -640,8 +862,13 @@ else
 		s13_ok=0
 		printf '  the C4 negative control leaked into the C1-C3 allowlist\n' >&2
 	fi
-	[ "$(printf '%s\n' "$s13_allow" | wc -l)" -eq 15 ] || s13_ok=0
-	if git grep -qE 'ksc[-]test[.]com' -- . 2>/dev/null; then s13_ok=0; fi
+	s13_allow_count=$(printf '%s\n' "$s13_allow" | wc -l | tr -d '[:space:]')
+	if [ "$s13_allow_count" -ne 17 ]; then
+		s13_ok=0
+		printf '  allowlist size is %s entries; the declared size is 17\n' \
+			"$s13_allow_count" >&2
+	fi
+	if git grep --untracked -qE 'ksc[-]test[.]com' -- . 2>/dev/null; then s13_ok=0; fi
 	if grep -qE 'ksc[-]test[.]com' docs/REDACTION.md; then s13_ok=0; fi
 fi
 if [ "$s13_ok" -eq 1 ]; then emit S7-13 PASS; else
@@ -702,19 +929,63 @@ if [ "$s15_ok" -eq 1 ]; then emit S7-15 PASS; else
 fi
 
 # ---------------------------------------------------------------- S7-18
-# C4: deploy/ is frozen at v0.3.0. Fail closed when the ref is missing —
+# C4: deploy/ is frozen at v0.3.0, with exactly one recorded amendment: the
+# `protocols h1 h2` protocol-surface pin. Fail closed when the ref is missing —
 # an unverifiable freeze must never read as a pass.
-if git rev-parse --verify --quiet 'v0.3.0^{commit}' >/dev/null 2>&1; then
-	s18_diff="$(git diff --name-only 'v0.3.0' -- deploy/ 2>/dev/null)"
-	if [ -z "$s18_diff" ]; then
-		emit S7-18 PASS
-	else
-		emit S7-18 FAIL
-		printf '  deploy/ changed since v0.3.0:\n%s\n' "$s18_diff" >&2
-	fi
-else
+#
+# The amendment is recognised by its CONTENT, not by a commit hash. A hash would
+# make the guard depend on history being rewritten identically, and it would
+# still pass if the same commit carried anything else. Content makes the guard
+# say what it means: deploy/ may differ from v0.3.0 only in deploy/Caddyfile,
+# only by additions, and the added non-comment lines must be exactly one
+# `protocols h1 h2`. Anything else — a second file, a deletion, an extra
+# directive, an untracked file — is a FAIL.
+if ! git rev-parse --verify --quiet 'v0.3.0^{commit}' >/dev/null 2>&1; then
 	emit S7-18 FAIL
 	printf '  v0.3.0 ref missing; deploy freeze unverifiable\n' >&2
+else
+	s18_ok=1
+	s18_numstat="$(git diff --numstat 'v0.3.0' -- deploy/ 2>/dev/null)"
+	s18_untracked="$(git ls-files --others --exclude-standard -- deploy/ 2>/dev/null)"
+	if [ -n "$s18_numstat" ]; then
+		s18_files=$(printf '%s\n' "$s18_numstat" | awk '{print $3}')
+		s18_deleted=$(printf '%s\n' "$s18_numstat" | awk '{s += $2} END {print s + 0}')
+		if [ "$s18_files" != "deploy/Caddyfile" ]; then
+			s18_ok=0
+			printf '  deploy/ differs from v0.3.0 in files other than deploy/Caddyfile:\n%s\n' \
+				"$s18_numstat" >&2
+		fi
+		if [ "$s18_deleted" -ne 0 ]; then
+			s18_ok=0
+			printf '  deploy/ delta removes %s line(s) from the frozen tree\n' \
+				"$s18_deleted" >&2
+		fi
+		if [ "$s18_files" = "deploy/Caddyfile" ] && [ "$s18_deleted" -eq 0 ]; then
+			s18_added=$(git diff 'v0.3.0' -- deploy/Caddyfile 2>/dev/null | awk '
+				/^+++ / {next}
+				/^\+/ {
+					line = substr($0, 2)
+					sub(/[[:space:]]*#.*$/, "", line)
+					gsub(/[[:space:]]+/, " ", line)
+					sub(/^ /, "", line)
+					sub(/ $/, "", line)
+					if (line != "") print line
+				}')
+			if [ "$s18_added" != "protocols h1 h2" ]; then
+				s18_ok=0
+				printf '  deploy/Caddyfile adds directives beyond the protocol pin:\n%s\n' \
+					"$s18_added" >&2
+			fi
+		fi
+	fi
+	if [ -n "$s18_untracked" ]; then
+		s18_ok=0
+		printf '  untracked files inside the frozen deploy/ tree:\n%s\n' \
+			"$s18_untracked" >&2
+	fi
+	if [ "$s18_ok" -eq 1 ]; then emit S7-18 PASS; else
+		emit S7-18 FAIL
+	fi
 fi
 
 # ------------------------------------------------------------------- verdict
@@ -726,7 +997,8 @@ set_ok=1
 if ! diff <(printf '%s' "$EMITTED_IDS" | sort -u) \
 	<(printf '%s\n' $ITEM_LIST | sort -u) >/dev/null 2>&1; then
 	set_ok=0
-	printf '  emitted ID set differs from ITEM_LIST (expected 24 entries):\n' >&2
+	printf '  emitted ID set differs from ITEM_LIST (expected %s entries):\n' \
+		"$EXPECTED_ITEMS" >&2
 	diff <(printf '%s' "$EMITTED_IDS" | sort -u) \
 		<(printf '%s\n' $ITEM_LIST | sort -u) >&2
 fi

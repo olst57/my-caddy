@@ -130,7 +130,8 @@ else
 fi
 
 # ----------------------------------------------------------------- A1(b) build
-export PATH="$PATH:$(go env GOPATH)/bin"
+GOPATH_BIN="$(go env GOPATH)/bin"
+export PATH="$PATH:$GOPATH_BIN"
 go install "github.com/caddyserver/xcaddy/cmd/xcaddy@$XCADDY_VERSION" > "$GATE_DIR/a1-xcaddy.log" 2>&1
 c5=$?
 xcaddy version >> "$GATE_DIR/a1-xcaddy.log" 2>&1
@@ -144,7 +145,7 @@ fi
 # gate-build.sh finds $SRC already cloned and already patched, so it reuses both.
 bash "$HERE/gate-build.sh" "$REPO_ROOT" > "$GATE_DIR/a1-build.log" 2>&1
 c6=$?
-ev_block "xcaddy build $CADDY_TAG --replace github.com/caddyserver/caddy/v2=$SRC --with github.com/caddyserver/forwardproxy=github.com/klzgrad/forwardproxy@$FWDPROXY_SHA --with github.com/mholt/caddy-l4=github.com/mholt/caddy-l4@$L4_SHA" "$c6" "$GATE_DIR/a1-build.log"
+ev_block "xcaddy build $CADDY_TAG --replace github.com/caddyserver/caddy/v2=$SRC --with github.com/caddyserver/forwardproxy=github.com/olst57/forwardproxy@$FWDPROXY_SHA --with github.com/mholt/caddy-l4=github.com/olst57/caddy-l4@$L4_SHA" "$c6" "$GATE_DIR/a1-build.log"
 if [ "$c6" -eq 0 ]; then
 	ev_assert "build" PASS "EXIT=0"
 else

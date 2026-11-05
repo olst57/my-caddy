@@ -11,9 +11,11 @@
 # xcaddy writes its output as ./caddy in the working directory, which is $GATE_DIR,
 # so a source directory named "caddy" would collide with the output binary path.
 #
-# The build command below uses pinned 40-hex SHAs only. The upstream branch names
-# (klzgrad/forwardproxy `naive`, mholt/caddy-l4 `master`) are resolved to SHAs in
-# the `pins` job and never appear as build arguments.
+# The build command below uses pinned 40-hex SHAs only. The branch names
+# (olst57/forwardproxy `naive`, olst57/caddy-l4 `master`) are resolved to SHAs in
+# the `pins` job and never appear as build arguments. The repositories must be
+# this project's forks, matching scripts/build.sh: a fork SHA does not exist in
+# the upstream repository, so mixing the two makes the build fail to resolve.
 set -uo pipefail
 
 REPO_ROOT="${1:?usage: gate-build.sh <repo-root> [extra xcaddy args...]}"
@@ -61,6 +63,6 @@ cd "$GATE_DIR" || exit 1
 echo "xcaddy build: forwardproxy@$FWDPROXY_SHA caddy-l4@$L4_SHA ${EXTRA_ARGS[*]:-}"
 xcaddy build "$CADDY_TAG" \
 	--replace "github.com/caddyserver/caddy/v2=$SRC" \
-	--with "github.com/caddyserver/forwardproxy=github.com/klzgrad/forwardproxy@$FWDPROXY_SHA" \
-	--with "github.com/mholt/caddy-l4=github.com/mholt/caddy-l4@$L4_SHA" \
+	--with "github.com/caddyserver/forwardproxy=github.com/olst57/forwardproxy@$FWDPROXY_SHA" \
+	--with "github.com/mholt/caddy-l4=github.com/olst57/caddy-l4@$L4_SHA" \
 	"${EXTRA_ARGS[@]}"

@@ -39,16 +39,23 @@ run's set passes and the verifier prints `VERIFY: PASS`.
 **The Windows authoring host cannot run the S3 items at all.** The artifact is a
 Linux ELF and the authoring host is Windows/MSYS. It fail-closes at preflight —
 `FATAL: CADDY_BIN is not executable: dist/caddy-linux-amd64` — and exits `2`
-before any item runs, so the eleven S3 items are unreachable there. That is a
+before any item runs, so the thirteen S3 items are unreachable there. That is a
 limitation of the authoring host, not a verdict on the deliverable. The
 fail-closed behaviour itself **is** verified on that host, because that path was
 exercised.
 
-**No CI job runs `verify.sh`.** There is no committed workflow that invokes the
-verifier; `.github/workflows/build.yml` builds the artifacts and
-`.github/workflows/gate0.yml` runs the Gate 0 probes, and neither runs
-`scripts/verify.sh`. Do not read this document as a claim that CI verified
-anything. Both runs were manual: v0.2.0 in a Codespace, v0.2.1 on `hw-gz`.
+**CI runs `verify.sh` from v0.4.3 onward.** `.github/workflows/verify.yml` builds
+`dist/caddy-linux-amd64` from the pinned inputs, runs this verifier over the
+delivery configs, and then runs `tests/coexist/run.sh` against that same binary
+on `ubuntu-latest` (with root, because the coexistence test binds `:443`). The
+two older workflows do not run it: `.github/workflows/build.yml` builds the
+artifacts and `.github/workflows/gate0.yml` runs the Gate 0 probes. Every run
+quoted below is therefore historical and was manual: v0.2.0 in a Codespace,
+v0.2.1 on `hw-gz`.
+
+The item set quoted below is the 26-item set that the workflow runs. The
+workflow exists so a regression is caught without a human re-running anything;
+it does not retroactively turn the older manual runs into CI runs.
 
 Anyone reproducing it locally requires a **Linux host** (a Codespace, a
 container, or any Linux machine) plus the artifact downloaded from the `build`
@@ -139,6 +146,7 @@ be inert there. See D-2 in `.gate/release/DEVIATIONS.md`.
 | PROXY forwarding | exactly one `proxy` handler, `proxy_protocol` = `v2`, `upstreams[0].dial[0]` matching `^127\.0\.0\.1:[0-9]+$` |
 | B isolated | the `b.test` 404 route is `terminal` and is ordered before the `forward_proxy` route in the same server |
 | naive preconditions | exactly one `forward_proxy` server on `:443`, no `upstream` key on the `forward_proxy` object, and `forward_proxy` ordered **before** `reverse_proxy` in the site's subroute |
+| naive is authenticated | the one `forward_proxy` object carries a non-empty `auth_credentials` array and a `probe_resistance` object with a non-empty `domain`, with three deletion controls |
 
 The B-isolation row is a deliberate substitution and it must be stated plainly,
 because a reader comparing the spec text to the verifier will otherwise think a
@@ -199,6 +207,53 @@ through `forward_proxy`'s own `basic_auth` reading `Proxy-Authorization`; that
 is a separate mechanism and it needs no `authentication` handler in the site.
 Do not reintroduce either the clause or the site-level `basic_auth`.
 
+### The naive endpoint must be authenticated, and the offline check must see it
+
+S3-13 closes a hole that was measured, not imagined. Deleting **both**
+`basic_auth <NAIVE_USER> <NAIVE_PASSWORD>` and `probe_resistance example.com`
+from `deploy/Caddyfile` leaves `caddy validate` and `caddy adapt` exiting `0`,
+and every other item in this file still reporting PASS — while the running
+endpoint answers an unauthenticated `CONNECT` with `200` and opens a tunnel to
+the target. An open proxy is exactly the kind of failure an offline structural
+verifier is supposed to catch, and before S3-13 it did not.
+
+The three deletion shapes were each measured on the built binary, and they fail
+differently:
+
+| deletion | `caddy validate` | caught before S3-13 by |
+| --- | --- | --- |
+| `basic_auth` only | exit `1`, `probe resistance requires authentication` | S3-2 |
+| `probe_resistance` only | exit `0`, `Valid configuration` | nothing — the decoy was gone and every item was green |
+| both | exit `0`, `Valid configuration` | nothing — the endpoint was an open proxy |
+
+That is why one item asserts both keys instead of two separate items: the
+`basic_auth`-only case is already loud, the other two are silent, and an item
+that checked only one key would report green on one of the silent shapes.
+
+The assertion is a conjunction: exactly one `forward_proxy` handler, a
+non-empty `auth_credentials` array on it (Caddy's compiled form of
+`basic_auth`, whose entries are either credential strings or one-element
+arrays, depending on how the directive was written), and a `probe_resistance`
+object carrying a non-empty `domain`. An **absent** key is not "no policy": for
+`auth_credentials` absent means no credentials are required, so it FAILs.
+
+Three mutation controls run in the same item, over copies in the verifier's
+scratch directory: `auth_credentials` deleted, `probe_resistance` deleted, and
+both deleted. Each deletion must **land**, and that is checked semantically
+rather than by comparing bytes: after the deletion the key must be gone from
+every `forward_proxy` object while that object itself is still there. A byte
+comparison would be useless here, because `caddy adapt` writes compact JSON and
+`jq` pretty-prints it, so the two files always differ even when nothing was
+deleted. A broken `del()` would leave the document intact, the filter would
+correctly still pass, and the control would report green while testing nothing.
+Each landed copy must then make the filter return false. The filter and the
+controls share one jq program, so the control cannot drift away from the
+assertion it is supposed to test.
+
+The negative direction was also observed by hand once: with both directives
+removed from the Caddyfile, `ITEM S3-13 FAIL` is the only FAIL and
+`VERIFY: FAIL` follows.
+
 ### C3 — the xray skeleton
 
 `deploy/xray/config.json` must parse, and its `acceptProxyProtocol` must be
@@ -221,7 +276,13 @@ reads the `sni` array's scalars directly; wrapping it again would compare
 
 ### Sprint 7 — secrets hygiene and the placeholder register
 
-No credential-shaped value may exist outside the register. The checks are:
+No credential-shaped value may exist outside the register. The checks read the
+**work tree**, not the index: `git grep --untracked` is used throughout, so a
+file that is new and not yet staged is scanned before it is committed rather
+than after. It still honours `.gitignore`, so `dist/`, `.build/`, `.gate/` and
+`.env` are excluded — local build state and local secrets are not part of the
+deliverable and must not make the gate noisy. The commands quoted below show
+the tracked-only form for readability; `scripts/verify.sh` is the authority.
 
 ```bash
 $ git ls-files --error-unmatch .env >/dev/null 2>&1 || echo "not tracked"
@@ -248,6 +309,54 @@ $ git grep -hoE '<[A-Z_]+>' -- deploy/ ':!deploy/PLACEHOLDERS.md' | sort -u
 ```bash
 $ git grep -hoE '<[A-Z_]+>' -- deploy/PLACEHOLDERS.md | sort -u
 ```
+
+S7-4 and S7-5 read the work tree too, for the same reason as S7-13, and both
+were checked with a mutation rather than assumed. A new untracked file in
+`deploy/` naming `newhost\.example\.io` makes S7-4 FAIL and, because the same
+host is also a tree token, S7-13 FAIL with it. A new untracked file in `deploy/`
+carrying an unregistered `<TOKEN>` shape makes S7-5 FAIL. Both mutations were
+reverted and the tree returned to `PASS=26 FAIL=0`.
+
+#### Why the scan reads the work tree, and what that was measured to catch
+
+The first version of this gate used a plain `git grep`, which reads the index.
+That has a blind spot with a concrete failure: a file that is new and not yet
+staged is invisible, so it is scanned for the first time only after it is
+committed. `tests/coexist/` was written that way, and it carried the SNI
+`unknown.test` — a hostname that is fine, but which had never been through the
+allowlist gate at all. The gate was green while the check was not running over
+the new tree.
+
+`git grep --untracked` closes that. It reads the work tree and still honours
+`.gitignore`, which was verified rather than assumed: probe files placed in
+`.gate/`, `dist/` and `.env` are not scanned, so local build state and local
+secrets cannot make the gate noisy or leak into its output.
+
+The tree mutations below were run on `hw-gz` alongside the two `deploy/`
+mutations above, each on the real tree and each reverted afterwards. The first
+row is the baseline and the last is the ignored-path control:
+
+| mutation | item result |
+| --- | --- |
+| clean tree | `S7-12 PASS`, `S7-13 PASS`, `PASS=26` |
+| untracked file naming an unlisted host | `S7-13 FAIL` only, naming that host |
+| `unknown.test` removed from the allowlist | `S7-13 FAIL` only, naming it and reporting size `16` |
+| untracked file carrying a UUID-shaped id | `S7-2 FAIL` and `S7-12 FAIL` |
+| untracked file carrying a live-looking secret assignment | `S7-12 FAIL` only |
+| the same probes placed under `.gate/` | `S7-12 PASS`, `S7-13 PASS` |
+
+The last row is the control that matters: the gate is sensitive to a new file
+in the tree and **not** sensitive to ignored local state. Without it, "the scan
+now reads the work tree" would be a claim about a scan that might simply be
+reading everything.
+
+One extractor bug was found and fixed while doing this. The domain regex had no
+trailing word boundary, so Python source `self\.command` in
+`tests/coexist/site-backend.py` was extracted as the host `self\.com`. That is
+not a host, and allow-listing it would have been a false statement about what
+the token is. A trailing `\b` removes it while `go.uber.org/zap`,
+`a.test:443` and a genuine `self\.com` still match — measured on the same grep
+build the verifier runs against.
 
 ### The aggregate verifier
 
@@ -316,12 +425,12 @@ and `VERIFY: PASS`, produced on `hw-gz` after S3-9 changed.
 
 That recorded output predates the five items v0.4.0-SP7 added, so it is not the
 current item set and must not be read as one. `scripts/verify.sh` now declares
-its own size — `EXPECTED_ITEMS=24`, kept in the same file as the items it counts
+its own size — `EXPECTED_ITEMS=26`, kept in the same file as the items it counts
 — and the current set is
 
 `S3-1`, `S3-2`, `S3-3`, `S3-4`, `S3-5`, `S3-6`, `S3-7`, `S3-8`, `S3-9`,
-`S3-10`, `S3-11`, `S7-1`, `S7-2`, `S7-3`, `S7-4`, `S7-5`, `S7-6`, `S7-7`,
-`S7-8`, `S7-12`, `S7-13`, `S7-14`, `S7-15`, `S7-18`.
+`S3-10`, `S3-11`, `S3-12`, `S3-13`, `S7-1`, `S7-2`, `S7-3`, `S7-4`, `S7-5`,
+`S7-6`, `S7-7`, `S7-8`, `S7-12`, `S7-13`, `S7-14`, `S7-15`, `S7-18`.
 
 The gap in the `S7-*` numbering is deliberate. `S7-9`, `S7-10`, `S7-11`,
 `S7-16` and `S7-17` are meta-items about the verifier itself: does it exit `0`,
@@ -341,7 +450,7 @@ answers" below.
 A full run ends with a machine-readable summary line, then the verdict:
 
 ```text
-PASS=24 FAIL=0
+PASS=26 FAIL=0
 VERIFY: PASS
 ```
 
@@ -415,7 +524,10 @@ what the `reverse_proxy` handler is there for, and it is only reachable because
 
 ### A successful naive CONNECT does not say "Connection established"
 
-A CONNECT carrying a valid `Proxy-Authorization` answers
+This was measured before the `protocols h1 h2` pin landed, so the `Alt-Svc`
+line below no longer appears in a run of the current delivery config: the pin
+removes the QUIC listener. The rest of the observation still holds. A CONNECT
+carrying a valid `Proxy-Authorization` answers
 
 ```text
 HTTP/1.1 200 OK
@@ -432,6 +544,58 @@ a `GET /` sent inside the tunnel came back with the origin's own
 `HTTP/1.0 200 OK` and a full page body (201,691 bytes in `SP4B-D2.txt`; the
 page size varies per run). Do not assert on "Connection established", and do not
 treat `200 OK` alone as proof.
+
+### The naive hop carries HTTP/2 as well as HTTP/1.1
+
+The CONNECT observation above is an HTTP/1.1 proxy hop. `tests/coexist/run.sh`
+CO-4 asserts that leg, and CO-6 asserts the other one: the same credentialled
+CONNECT with `curl --proxy-http2`, so the hop is negotiated as h2 before any
+CONNECT is sent. Measured on `hw-gz` against the delivery config:
+
+```text
+ALPN: server accepted h2
+CONNECT tunnel: HTTP/2 negotiated
+200, body 253563 bytes
+```
+
+CO-6 does **not** assert `%{http_version}`. That variable reports the version of
+the **origin** request inside the tunnel, which says nothing about the hop under
+test; asserting it would pass or fail for the wrong reason. The hop's version
+comes from curl's verbose transcript, which names it explicitly. The item also
+asserts no `Proxy-Authenticate` header on the reply, so the h2 leg cannot be
+confused with a rejected CONNECT.
+
+Without CO-6 the h2 half of the `protocols h1 h2` pin would be untested at
+runtime: S3-12 proves the pin is declared and adapted, but not that a client
+can actually negotiate h2 on the proxy hop. The mutation control was run once —
+removing `--proxy-http2` makes CO-6 and only CO-6 FAIL — which shows the item
+is sensitive to the transport rather than to the tunnel being up.
+
+### The protocol pin is a statement about listeners, not headers
+
+`protocols h1 h2` is easy to read as "do not advertise h3". The stronger claim
+it makes is that the QUIC listener is never created, and that is what CO-7
+asserts, because a missing `Alt-Svc` header is only indirect evidence: a
+response can omit it while a UDP socket still exists.
+
+The item samples both transports while the stack is running. It FAILs if
+anything is listening on UDP `:443`, and it FAILs if TCP `:443` is *not*
+listening in the same sample. The second half is the control: `ss -lun` alone
+would also be satisfied by a Caddy that had crashed, and the earlier items have
+already run by then.
+
+Measured on `hw-gz` with the same binary. The mutation adds `h3` to the
+directive and nothing else:
+
+| tree | `ss -lnt 'sport = :443'` | `ss -lun 'sport = :443'` | item |
+| --- | --- | --- | --- |
+| delivery config | `LISTEN *:443` | empty | `CO-7 PASS` |
+| `protocols h1 h2 h3` | `LISTEN *:443` | `UNCONN *:443` | `CO-7 FAIL` only |
+
+The mutation run printed `CO-1` through `CO-6` PASS and `CO-7 FAIL`, and the
+failure message carried both socket lines, so the diagnosis names the listener
+rather than the header. The file was restored and the suite returned to
+`COEXIST: PASS` with seven items.
 
 ### An acl-denied CONNECT also answers 200 OK, then closes
 

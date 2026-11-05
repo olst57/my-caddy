@@ -57,9 +57,12 @@ jobs:
         id: p
         run: |
           set -euo pipefail
-          # Branch names are the input to resolve here, and only here.
-          FWDPROXY_SHA=$(git ls-remote https://github.com/klzgrad/forwardproxy refs/heads/naive | awk '{print $1}')
-          L4_SHA=$(git ls-remote https://github.com/mholt/caddy-l4 refs/heads/master | awk '{print $1}')
+          # Branch names are the input to resolve here, and only here. The
+          # repositories are this project's forks, matching scripts/build.sh:
+          # resolving upstream heads here would mean the gate proves a
+          # different source than the delivery build compiles.
+          FWDPROXY_SHA=$(git ls-remote https://github.com/olst57/forwardproxy refs/heads/naive | awk '{print $1}')
+          L4_SHA=$(git ls-remote https://github.com/olst57/caddy-l4 refs/heads/master | awk '{print $1}')
           XCADDY_VERSION=$(git ls-remote --tags --refs https://github.com/caddyserver/xcaddy \
             | awk '{print $2}' | sed 's#refs/tags/##' \
             | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
@@ -82,8 +85,8 @@ jobs:
             fi
           done
 
-          echo "forwardproxy (klzgrad/forwardproxy naive) = $FWDPROXY_SHA"
-          echo "caddy-l4    (mholt/caddy-l4 master)        = $L4_SHA"
+          echo "forwardproxy (olst57/forwardproxy naive)   = $FWDPROXY_SHA"
+          echo "caddy-l4    (olst57/caddy-l4 master)       = $L4_SHA"
           echo "xcaddy                                     = $XCADDY_VERSION"
           echo "xray                                       = $XRAY_VERSION"
 
