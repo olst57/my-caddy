@@ -53,11 +53,17 @@ artifacts and `.github/workflows/gate0.yml` runs the Gate 0 probes.
 
 The first enforced run is pull request #1,
 <https://github.com/olst57/my-caddy/actions/runs/42049087626>, on commit
-`75bd95a` (2026-11-05). Job `offline` took 1m50s and printed `PASS=26 FAIL=0`
-then `VERIFY: PASS`; job `coexist` took 24s, printed `ITEM CO-1` through
-`ITEM CO-7`, and ended with `COEXIST: PASS`. Both jobs are blocking: either
-one failing makes the run red. Every other run quoted below is historical and
-was manual: v0.2.0 in a Codespace, v0.2.1 on `hw-gz`.
+`75bd95a` (2026-11-05): `offline` printed `PASS=26 FAIL=0` then `VERIFY: PASS`,
+and `coexist` printed the seven items that existed then and ended with
+`COEXIST: PASS`. The suite has since grown to eight items; the current head of
+the pull request,
+<https://github.com/olst57/my-caddy/actions/runs/42054615674>, on commit
+`d3b4f67`, prints `ITEM CO-1` through `ITEM CO-8` and the same two verdict
+lines. Both jobs are blocking, and that was measured rather than assumed: one
+control run failed `offline` alone (run 42052579628), and another failed
+`coexist` alone while `offline` passed (run 42053168208). Every other run
+quoted below is historical and was manual: v0.2.0 in a Codespace, v0.2.1 on
+`hw-gz`.
 
 The item set quoted below is the 26-item set that the workflow runs. The
 workflow exists so a regression is caught without a human re-running anything;
@@ -711,6 +717,20 @@ configs dropped the block; that is a harness note, not a delivery defect. The
 delivery config lists `layer4` and then `tls`, which is valid and loads. Do not
 "simplify" the block to `tls` alone, and do not read the Sprint 4 overlays as
 the delivery shape.
+
+## The v0.4.0 acceptance closure record
+
+The runtime acceptance round recorded 12 PASS, 7 FAIL and 2 NOT-TESTED. The
+nine unresolved rows now carry exactly one disposition each in
+`.gate/v043/RTA-DISPOSITIONS.md` (gitignored, like the other `.gate/` records):
+two are `fixed` (RTA-16, RTA-17), five are `documented limitation` (RTA-8,
+RTA-11, RTA-12, RTA-15, RTA-20), and two are `deferred` (RTA-13, RTA-14).
+
+The deferred rows are the REALITY measurements above. They close only with a
+handshake through the tunnel against a replaced destination, and nothing in
+this tree performs that handshake. That table is the authoritative closure
+record for the round; it is linked here so a release check does not have to
+trust this paragraph.
 
 ## What the Windows authoring host cannot do
 
