@@ -10,7 +10,7 @@ provides:
   - license and SPDX record plus release assets
 
 actuals:
-  commits: 3
+  commits: 5
   release_assets_added: 6
 
 key-files:

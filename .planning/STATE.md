@@ -101,7 +101,7 @@ None. The milestone's plans are all complete.
 
 | # | Description | Date | Commit | Status | Directory |
 |---|-------------|------|--------|--------|-----------|
-| 261106-tfx | Close the v0.4.3 follow-ups: pin fork SHAs, execute arm64, conclude licenses | 2026-11-06 | 820b890 | complete | [261106-tfx-close-v0-4-3-follow-ups-pin-fork-shas-ex](./quick/261106-tfx-close-v0-4-3-follow-ups-pin-fork-shas-ex/) |
+| 261106-tfx | Close the v0.4.3 follow-ups: pin fork SHAs, execute arm64, conclude licenses | 2026-11-06 | db05ba0 | complete | [261106-tfx-close-v0-4-3-follow-ups-pin-fork-shas-ex](./quick/261106-tfx-close-v0-4-3-follow-ups-pin-fork-shas-ex/) |
 
 ## Deferred Items
 
@@ -115,5 +115,5 @@ None. The milestone's plans are all complete.
 ## Session Continuity
 
 Last session: 2026-11-06
-Stopped at: milestone `v0.4.3` delivered, follow-ups closed, `main` at `820b890`.
+Stopped at: milestone `v0.4.3` delivered, follow-ups closed, `main` at `db05ba0`.
 Resume file: .planning/quick/261106-tfx-close-v0-4-3-follow-ups-pin-fork-shas-ex/261106-tfx-SUMMARY.md
