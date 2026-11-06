@@ -30,15 +30,15 @@
 #   L4_SHA           default from pins/build-inputs.env
 #   XCADDY_VERSION   default from pins/build-inputs.env
 #   PINS_FILE        default ./pins/build-inputs.env
-#   GO_VERSION       informational only; the toolchain comes from CI setup-go
 #   DIST_DIR         default ./dist
 #   BUILD_DIR        default ./.build
 #
 # The two replaced modules are built from this project's own forks at commits
 # fixed in pins/build-inputs.env. A fork sync does not move a build until that
 # file is edited and reviewed, so the same tree always compiles the same source
-# inputs. Each run still writes dist/pins.txt, and that receipt is the record of
-# what the run actually compiled.
+# inputs. PIN_GO_VERSION is not overridable: the active toolchain must match that
+# exact patch. Each run still writes dist/pins.txt, and that receipt is the
+# record of what the run actually compiled.
 
 set -euo pipefail
 
@@ -99,6 +99,8 @@ for v in FWDPROXY_SHA L4_SHA CADDY_COMMIT; do
 done
 printf '%s' "$XCADDY_VERSION" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$' \
 	|| die "XCADDY_VERSION is not an exact vX.Y.Z tag (got '$XCADDY_VERSION')"
+printf '%s' "$PIN_GO_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' \
+	|| die "PIN_GO_VERSION is not an exact X.Y.Z version (got '$PIN_GO_VERSION')"
 
 if [ "$print_pins" -eq 1 ]; then
 	printf 'pins_file=%s\n' "$PINS_FILE"
@@ -107,12 +109,19 @@ if [ "$print_pins" -eq 1 ]; then
 	printf 'forwardproxy_sha=%s\n' "$FWDPROXY_SHA"
 	printf 'caddy_l4_sha=%s\n' "$L4_SHA"
 	printf 'xcaddy_version=%s\n' "$XCADDY_VERSION"
+	printf 'go_version=go%s\n' "$PIN_GO_VERSION"
 	exit 0
 fi
 
+EXPECTED_GO_VERSION="go$PIN_GO_VERSION"
+export GOTOOLCHAIN=local
+ACTUAL_GO_VERSION="$(go env GOVERSION 2>/dev/null || true)"
+[ "$ACTUAL_GO_VERSION" = "$EXPECTED_GO_VERSION" ] \
+	|| die "Go toolchain is '${ACTUAL_GO_VERSION:-missing}', expected $EXPECTED_GO_VERSION; set up Go from PIN_GO_VERSION"
+
 mkdir -p "$DIST_DIR" "$BUILD_DIR"
 
-log "pins: caddy=$CADDY_TAG forwardproxy=$FWDPROXY_SHA caddy-l4=$L4_SHA xcaddy=$XCADDY_VERSION"
+log "pins: caddy=$CADDY_TAG forwardproxy=$FWDPROXY_SHA caddy-l4=$L4_SHA xcaddy=$XCADDY_VERSION go=$EXPECTED_GO_VERSION"
 
 # ------------------------------------------------------- source + one patch
 if [ ! -d "$SRC/.git" ]; then

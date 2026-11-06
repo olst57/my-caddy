@@ -32,7 +32,7 @@ permissions:
 
 env:
   CADDY_TAG: v2.11.7
-  GO_VERSION: 1.26.x
+  GO_VERSION: 1.26.9
 
 jobs:
   offline:

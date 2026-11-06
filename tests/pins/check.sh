@@ -5,11 +5,11 @@
 # Usage: bash tests/pins/check.sh [--pins <dist/pins.txt>]
 #
 # Exits 0 only when:
-#   1. pins/build-inputs.env exists and holds exactly the six expected keys,
+#   1. pins/build-inputs.env exists and holds exactly the seven expected keys,
 #   2. every key has the right shape,
 #   3. neither scripts/build.sh nor gate0.yml resolves a branch at run time,
 #   4. `scripts/build.sh --print-pins` prints those exact values,
-#   5. if a build receipt is supplied, its four fields agree.
+#   5. if a build receipt is supplied, every compared pinned field agrees.
 
 set -euo pipefail
 
@@ -38,7 +38,7 @@ fail() {
 
 [ -f "$PINS_FILE" ] || fail "missing $PINS_FILE"
 
-expected_keys='PIN_CADDY_TAG PIN_CADDY_COMMIT PIN_FWDPROXY_SHA PIN_L4_SHA PIN_XCADDY_VERSION PIN_XRAY_VERSION'
+expected_keys='PIN_CADDY_TAG PIN_CADDY_COMMIT PIN_FWDPROXY_SHA PIN_L4_SHA PIN_XCADDY_VERSION PIN_GO_VERSION PIN_XRAY_VERSION'
 seen_keys=""
 
 line_no=0
@@ -78,6 +78,23 @@ for key in PIN_CADDY_TAG PIN_XCADDY_VERSION PIN_XRAY_VERSION; do
 		|| fail "$key is not an exact vX.Y.Z tag: ${!key}"
 done
 
+printf '%s' "$PIN_GO_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' \
+	|| fail "PIN_GO_VERSION is not an exact X.Y.Z version: $PIN_GO_VERSION"
+
+# GO_VERSION is duplicated in the workflows because setup-go needs it before
+# the build starts. Keep those copies honest by making this check fail when any
+# workflow drifts from the pins file.
+go_version_re=$(printf '%s' "$PIN_GO_VERSION" | sed 's/\./\\./g')
+for workflow in build gate0 verify verify-arm64-release; do
+	workflow_file="$REPO_ROOT/.github/workflows/$workflow.yml"
+	[ -f "$workflow_file" ] || fail "missing workflow: $workflow.yml"
+	count=$(grep -cE '^[[:space:]]*GO_VERSION:' "$workflow_file" || true)
+	[ "$count" -eq 1 ] \
+		|| fail "$workflow.yml must declare GO_VERSION exactly once, found $count"
+	grep -qE "^[[:space:]]*GO_VERSION:[[:space:]]*${go_version_re}[[:space:]]*$" "$workflow_file" \
+		|| fail "$workflow.yml does not pin GO_VERSION to $PIN_GO_VERSION"
+done
+
 if grep -nE 'git[[:space:]]+ls-remote' "$REPO_ROOT/scripts/build.sh" \
 	"$REPO_ROOT/.github/workflows/gate0.yml" >&2; then
 	fail "a build path still resolves a ref at run time"
@@ -100,7 +117,8 @@ for pair in \
 	"caddy_commit=$PIN_CADDY_COMMIT" \
 	"forwardproxy_sha=$PIN_FWDPROXY_SHA" \
 	"caddy_l4_sha=$PIN_L4_SHA" \
-	"xcaddy_version=$PIN_XCADDY_VERSION"; do
+	"xcaddy_version=$PIN_XCADDY_VERSION" \
+	"go_version=go$PIN_GO_VERSION"; do
 	printf '%s\n' "$printed" | grep -qx "$pair" \
 		|| fail "build.sh --print-pins does not print $pair"
 done
@@ -112,7 +130,8 @@ if [ -n "$RECEIPT" ]; then
 		"caddy_source_head=$PIN_CADDY_COMMIT" \
 		"forwardproxy_sha=$PIN_FWDPROXY_SHA" \
 		"caddy_l4_sha=$PIN_L4_SHA" \
-		"xcaddy_version=$PIN_XCADDY_VERSION"; do
+		"xcaddy_version=$PIN_XCADDY_VERSION" \
+		"go_version=go$PIN_GO_VERSION"; do
 		grep -qx "$pair" "$RECEIPT" \
 			|| fail "receipt disagrees with the pins file: expected $pair"
 	done
