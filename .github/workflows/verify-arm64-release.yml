@@ -86,13 +86,17 @@ jobs:
           sha256sum dist/caddy-linux-arm64 | tee -a evidence/arm64/host.txt
           dist/caddy-linux-arm64 version | tee -a evidence/arm64/host.txt
           go version -m dist/caddy-linux-arm64 > .gate/arm64/buildinfo.txt
-          dist/caddy-linux-arm64 list-modules > evidence/arm64/modules.txt
+          # Keep the module inventory out of evidence/ until after the verifier:
+          # some Caddy module ids end in a dotted TLD-shaped suffix and are
+          # indistinguishable from a hostname to the S7-13 redaction scan. Putting
+          # the list in the scanned tree would therefore fail the verifier itself.
+          dist/caddy-linux-arm64 list-modules > .gate/arm64/modules.txt
           for module in \
             http.handlers.forward_proxy \
             layer4.handlers.proxy \
             caddy.listeners.layer4 \
             layer4.matchers.quic; do
-            grep -qx "$module" evidence/arm64/modules.txt
+            grep -qx "$module" .gate/arm64/modules.txt
           done
       - name: Offline verifier on arm64
         env:

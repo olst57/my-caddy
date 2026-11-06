@@ -1,0 +1,12 @@
+SPDX-License-Identifier: LicenseRef-Proprietary
+
+Copyright (c) 2026 the my-caddy repository owner. All rights reserved.
+
+The original source code, configuration, build scripts, documentation and other
+material in this repository are proprietary. No permission is granted to copy,
+modify, distribute, sublicense or use them except under a separate written
+agreement with the copyright holder.
+
+This notice does not change the license of any third-party component. The
+components distributed in a release binary remain under their own licenses;
+see THIRD_PARTY_NOTICES.md and LICENSES/.

@@ -86,6 +86,8 @@ observation. They are references, not endpoints of this delivery.
 [C3] www.microsoft.com
 [C3] www.apple.com
 [C3] www.google.com
+[C3] www.apache.org/licenses
+[C3] mozilla.org/MPL
 
 ## C4 — negative control
 

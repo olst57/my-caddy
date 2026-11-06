@@ -54,6 +54,8 @@ jobs:
           jq --version
       - name: Build inputs are pinned
         run: bash tests/pins/check.sh
+      - name: License record is complete
+        run: bash tests/licenses/check.sh
       - name: Build amd64 artifact
         run: bash scripts/build.sh --arch amd64
       - name: Offline verifier

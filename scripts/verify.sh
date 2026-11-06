@@ -863,9 +863,9 @@ else
 		printf '  the C4 negative control leaked into the C1-C3 allowlist\n' >&2
 	fi
 	s13_allow_count=$(printf '%s\n' "$s13_allow" | wc -l | tr -d '[:space:]')
-	if [ "$s13_allow_count" -ne 17 ]; then
+	if [ "$s13_allow_count" -ne 19 ]; then
 		s13_ok=0
-		printf '  allowlist size is %s entries; the declared size is 17\n' \
+		printf '  allowlist size is %s entries; the declared size is 19\n' \
 			"$s13_allow_count" >&2
 	fi
 	if git grep --untracked -qE 'ksc[-]test[.]com' -- . 2>/dev/null; then s13_ok=0; fi
