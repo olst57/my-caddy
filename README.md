@@ -183,7 +183,8 @@ the `go_version` field of `pins.txt`.
 
 1. Download the assets from the release page: `caddy-linux-amd64`,
    `caddy-linux-arm64`, `SHA256SUMS`, and `pins.txt`. The release also carries
-   `LICENSE`, `THIRD_PARTY_NOTICES.md`, and the four texts in `LICENSES/`; they
+   `LICENSE`, `THIRD_PARTY_NOTICES.md`, and the four license texts
+   (`Apache-2.0.txt`, `MIT.txt`, `BSD-3-Clause-Go.txt`, `MPL-2.0.txt`); they
    are not part of `SHA256SUMS`.
 2. From the directory that holds them, run `sha256sum -c SHA256SUMS`. The
    checksum file lists bare filenames, so the check reports a failure if you run
