@@ -110,12 +110,17 @@ version in it can be passed back to the build as `FWDPROXY_SHA`, `L4_SHA` and
 
 ## How the binary is verified
 
-Only the binary for the architecture of the build host is executed, and only
-that one is checked for its four modules. The arm64 artifact is verified at
-build-level only, and it is not executed.
+Both architectures are executed. `caddy-linux-amd64` runs the 26-item offline
+gate and the 8-item coexistence suite on `hw-gz` and in CI. The arm64 artifact
+is executed by the manual `verify-arm64-release` workflow on a GitHub-hosted
+`ubuntu-24.04-arm` runner: it downloads the published asset, checks the
+recorded sha256 before execution, and then runs the same 26 + 8 items. The
+`v0.4.3` run is
+<https://github.com/olst57/my-caddy/actions/runs/42228779590>; the extracted
+record is `evidence/v0.4.3/arm64-release.log`.
 
-That is the whole of it: no arm64 binary from this repository has ever been run,
-and none is claimed to have been run.
+Executing the arm64 artifact is not the same as rebuilding it byte-for-byte.
+The reproducibility limit below still applies to both architectures.
 
 ## One binary, three roles on 443
 
@@ -177,7 +182,9 @@ the `go_version` field of `pins.txt`.
 ## Quick start
 
 1. Download the assets from the release page: `caddy-linux-amd64`,
-   `caddy-linux-arm64`, `SHA256SUMS`, and `pins.txt`.
+   `caddy-linux-arm64`, `SHA256SUMS`, and `pins.txt`. The release also carries
+   `LICENSE`, `THIRD_PARTY_NOTICES.md`, and the four texts in `LICENSES/`; they
+   are not part of `SHA256SUMS`.
 2. From the directory that holds them, run `sha256sum -c SHA256SUMS`. The
    checksum file lists bare filenames, so the check reports a failure if you run
    it from somewhere else.
@@ -191,10 +198,18 @@ instance, a credential, a unique identifier, or a REALITY key. Where a concrete
 value would be needed, the text either omits it or points at `deploy/` and
 `docs/`, which is where the redacted placeholders live.
 
-This document also does not claim that the arm64 artifact has been run, or that
-a byte-identical rebuild has been established. HTTP/3 is not claimed at all:
-the delivery config turns it off. Each of those is written as not done, here
-and in the limitations above.
+This document does not claim that a byte-identical rebuild has been
+established. HTTP/3 is not claimed at all: the delivery config turns it off.
+Both are written as not done, here and in the limitations above.
+
+## Licensing
+
+The repository's own material is proprietary and all rights reserved; see
+`LICENSE` (`LicenseRef-Proprietary`). The release binary links Apache-2.0,
+MIT and BSD-3-Clause components, and the Caddy source is modified at build
+time. `THIRD_PARTY_NOTICES.md`, `LICENSES/` and `docs/LICENSING.md` record the
+components, the upstream refs, the license-text hashes and the distribution
+obligations. This is a provenance record, not legal advice.
 
 ## Out of scope in this round
 

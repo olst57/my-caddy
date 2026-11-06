@@ -114,10 +114,10 @@ grep -nE '([0-9]{1,3}\.){3}[0-9]{1,3}' .gate/release/SPRINT4-SUMMARY.md .gate/re
 - 命令：`bash scripts/redact-evidence.sh .gate/v043 evidence/v0.4.3`
   - stdout：`redact-evidence.sh: 4 file(s) redacted into evidence/v0.4.3`
   - stderr：空；退出码：`0`
-- 文件数：**4**
+- 文件数：**5** —— `redact-evidence.sh` 产出 4 个脱敏副本，另加 1 个从 ARM64 job log 提取的执行记录
 - 行数校验（副本 / 原件）：`ci-runs.txt` 8/8、`coexist-8.log` 9/9、`host.txt` 20/20、`verify-26.log` 28/28
 - 幂等：同一输入连跑两次，`diff -r` 为空
-- 归档哈希：`sha256sum evidence/v0.4.3/* | sha256sum` = `ad92d5f5c51823e2df4df44a85b8c2b9f634da74de24c920cc9892539db4cb2a`
+- 归档哈希（5 个文件）：`sha256sum evidence/v0.4.3/* | sha256sum` = `4521633caa8fa5c2265bb8abea11abf7035d0d503da2bdfed7a76eef49a19464`
 - 别名空间：沿用 `<HOST-1>`…`<HOST-7>` 与 `<PUBLIC_IP-1>`…`<PUBLIC_IP-6>`；本轮新增 `<HOST-8>`，用于 `uname -a` 打印的裸机器名 —— 它不含点，域名扫描看不见它，只有别名表能替换
 
 | # | 文件 | 行数 | 用途 |
@@ -126,6 +126,7 @@ grep -nE '([0-9]{1,3}\.){3}[0-9]{1,3}' .gate/release/SPRINT4-SUMMARY.md .gate/re
 | 2 | `coexist-8.log` | 9 | `ITEM CO-1`…`ITEM CO-8` 与 `COEXIST: PASS` |
 | 3 | `host.txt` | 20 | 机器名（别名化）、uid、commit `b60f042`、**release 资产**的 sha256、四个端口的事前样本 |
 | 4 | `verify-26.log` | 28 | 26 条 `ITEM` 加 `PASS=26 FAIL=0` 与 `VERIFY: PASS` |
+| 5 | `arm64-release.log` | 47 | ARM64 实机执行：`aarch64`、资产 sha256、26 条 offline 与 8 条 coexist 结果 |
 
 ### 本轮的两处已知差异
 
@@ -141,7 +142,22 @@ grep -nE '([0-9]{1,3}\.){3}[0-9]{1,3}' .gate/release/SPRINT4-SUMMARY.md .gate/re
 
 按“证据必须描述被发布的那个对象”的原则，两个套件已用**下载回来的 release 资产**在 `hw-gz`
 重跑：`PASS=26 FAIL=0`、`CO-1..CO-8 PASS`。本目录的副本即这一次采集，commit 为 `b60f042`。
-该漂移已记入 `docs/BUILD.md` 的 fork-ref 说明与本轮小结；把 fork 提交钉死是下一个里程碑的事。
+该漂移已记入 `docs/BUILD.md` 的 fork-ref 说明与本轮小结；随后在 `pins/build-inputs.env`
+中钉死两个 fork 的提交，并用一次真实 CI 构建确认产物哈希仍为 `693057c2…618f2`。
+
+### ARM64 实机执行（2026-11-06）
+
+ARM64 资产不再只是“结构校验”。手动工作流 `verify-arm64-release` 在 GitHub 托管的
+`ubuntu-24.04-arm` runner 上执行了已发布的 v0.4.3 资产：
+
+- run：<https://github.com/olst57/my-caddy/actions/runs/42228779590>，commit `820b890`
+- `runner_arch=aarch64`，`go version go1.26.10 linux/arm64`
+- 执行前校验 sha256：`76760bdf0ebf3447246806dbc8f18ee6a89871423625dec0a3b0d5798f9abd36`
+- `PASS=26 FAIL=0`、`VERIFY: PASS`、`ITEM CO-1`…`ITEM CO-8`、`COEXIST: PASS`
+- 本目录的 `arm64-release.log` 是从该 job 的日志中按行提取的，未改动内容
+
+这次执行证明**发布资产能在真实 aarch64 上运行并通过两套门禁**；它不证明 arm64
+重建与发布字节一致，后者仍未建立。
 
 ### 扫描结果
 

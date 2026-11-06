@@ -79,7 +79,9 @@ last_mapped_at: 2026-11-05
 
 ## Test Coverage Gaps
 
-- arm64 is artifact-verified only.
+- arm64 is executed by the manual `verify-arm64-release` workflow against the
+  `v0.4.3` release asset. A future release must run it again; the result does
+  not transfer to a new build.
 - Public-internet HTTP/3 is not tested because HTTP/3 is off.
 - A real deployment with real credentials is not tested.
 - `S7-9`, `S7-10`, `S7-11`, `S7-16`, and `S7-17` are script-external meta items
@@ -88,8 +90,8 @@ last_mapped_at: 2026-11-05
 ## Dependencies at Risk
 
 - `jq` is mandatory for the offline verifier; absence fails closed.
-- `xcaddy` is resolved to the newest stable tag, so the builder can move
-  independently of this repository.
+- `xcaddy` is pinned in `pins/build-inputs.env`; moving it is now a tracked
+  change rather than an ambient one.
 - Both module forks are single-maintainer projects.
 
 <!-- refreshed: 2026-11-05 -->

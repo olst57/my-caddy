@@ -85,6 +85,17 @@ follow-up moves those inputs into `pins/build-inputs.env`; `tests/pins/check.sh`
 now runs in the `verify` and `build` workflows, and `docs/BUILD.md` §The inputs
 are fixed in `pins/build-inputs.env` describes the mechanism.
 
+The arm64 asset was executed on a real ARM64 host rather than inferred from the
+amd64 run. The manual `verify-arm64-release` workflow ran on a GitHub-hosted
+`ubuntu-24.04-arm` runner at commit `820b890`
+(<https://github.com/olst57/my-caddy/actions/runs/42228779590>): it reported
+`runner_arch=aarch64`, checked the downloaded asset against sha256
+`76760bdf0ebf3447246806dbc8f18ee6a89871423625dec0a3b0d5798f9abd36` **before**
+execution, and then printed `PASS=26 FAIL=0`, `VERIFY: PASS`, `ITEM CO-1`
+through `ITEM CO-8`, and `COEXIST: PASS`. The extracted record is
+`evidence/v0.4.3/arm64-release.log`. This executes the published artifact; it
+does not claim a byte-identical rebuild on arm64.
+
 The item set quoted below is the 26-item set that the workflow runs. The
 workflow exists so a regression is caught without a human re-running anything;
 it does not retroactively turn the older manual runs into CI runs.
@@ -110,6 +121,9 @@ with its recorded output, under "The aggregate verifier" below.
 | host | Linux (the result of record); the Windows authoring host fail-closes |
 | tools | `jq`, `git`, `grep`, `sort`, `diff`, `comm`, `awk` |
 | artifact | `dist/caddy-linux-amd64`, the **built** binary from the `build` workflow run 41069346485 |
+
+The ARM64 run uses the same tool set, the same scripts and the released
+`caddy-linux-arm64` asset; only the host architecture differs.
 
 Check the tool that the structural assertions depend on:
 

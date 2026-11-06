@@ -150,10 +150,17 @@ assertions as item `S7-15`.
 
 ## Which architecture was executed
 
-`caddy-linux-amd64` is the native artifact and is the only one that is ever
-executed. `caddy-linux-arm64` is **artifact-verified only, never executed**: no
-behavioural claim exists for it in this slice. This is a deliberate scope
-boundary, not an oversight.
+`caddy-linux-amd64` is the native artifact: it runs the 26-item offline gate
+and the 8-item coexistence suite on `hw-gz` and on the CI runner.
+
+`caddy-linux-arm64` is no longer artifact-verified only. The manual
+`verify-arm64-release` workflow downloads the published `v0.4.3` asset, checks
+its recorded sha256 before execution, and runs the same two suites on a
+GitHub-hosted `ubuntu-24.04-arm` runner. The successful run is
+<https://github.com/olst57/my-caddy/actions/runs/42228779590>; the extracted
+record is `evidence/v0.4.3/arm64-release.log`. That run executes the released
+binary, not a local rebuild; the byte-reproducibility caveat above still
+applies to both architectures.
 
 ## Checking the artifacts you downloaded
 
@@ -201,7 +208,6 @@ longer holds: `caddy run`, a listener bind, a TLS handshake and an HTTP request
 on the Windows authoring host. What has still never been attempted:
 
 - Any xray start.
-- Any arm64 behaviour. `caddy-linux-arm64` is artifact-verified only.
 - Any REALITY session through the layer4 path. The runtime re-run exercised the
   naive and website paths only.
 

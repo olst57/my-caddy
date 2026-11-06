@@ -1,6 +1,15 @@
 ---
-gsd_state_version: '1.0'
+gsd_state_version: "1.0"
+milestone: v0.4.3
+milestone_name: Verification gate
+current_phase: 3
+current_phase_name: Publish v0.4.3
 status: complete
+stopped_at: milestone `v0.4.3` delivered, follow-ups closed, `main` at `820b890`.
+last_updated: "2026-11-06T14:01:13.519Z"
+last_activity: 2026-11-06
+last_activity_desc: "closed the release follow-ups at `820b890`: both"
+state_head: 820b8903b694c1a063e32d54cd216e8a114fee4e
 progress:
   total_phases: 3
   completed_phases: 3
@@ -17,17 +26,18 @@ See: .planning/PROJECT.md (updated 2026-11-06)
 
 **Core value:** Three roles coexist on one binary, one Caddyfile, and one
 `:443` without interference, and that claim is reproducible from evidence.
-**Current focus:** Milestone `v0.4.3` delivered; next milestone not planned.
+**Current focus:** Milestone `v0.4.3` delivered and its three follow-ups are
+closed; next milestone not planned.
 
 ## Current Position
 
 Phase: 3 of 3 (Publish v0.4.3) — complete
 Plan: 2 of 2 complete
 Status: Phase complete — milestone delivered
-Last activity: 2026-11-06 — tagged `b60f042`, published the four-asset release,
-re-ran 26 offline items and 8 coexistence items on the downloaded
-`caddy-linux-amd64`, and recorded the fork-SHA drift in `docs/BUILD.md` and
-`docs/VERIFY.md`. `main` at `083ec57` is green (run 42062987801).
+Last activity: 2026-11-06 — closed the release follow-ups at `820b890`: both
+fork commits are pinned in `pins/build-inputs.env`, the published arm64 asset
+passed 26 + 8 items on a real `ubuntu-24.04-arm` runner (run 42228779590), and
+the license/notice set is attached to release 435420474.
 
 Progress: [██████████] 100%
 
@@ -67,6 +77,13 @@ affecting current work:
 - `v0.4.3` is tagged on `b60f042`, the head of `main` after PR #1.
 - Evidence describes the **downloaded release asset**, not the local build,
   because `scripts/build.sh` resolves the two fork SHAs at build time.
+- Both fork commits are now pinned in `pins/build-inputs.env`; a CI build at
+  `0ef98bb` reproduced the published amd64 sha256, so the receipt is a build
+  input rather than a post-hoc record.
+- The arm64 claim is earned by execution, not inspection: the released asset
+  was run on `ubuntu-24.04-arm` and passed the same two suites.
+- The repository is `LicenseRef-Proprietary` and all rights reserved; the
+  third-party obligations are recorded, not relicensed.
 
 ### Pending Todos
 
@@ -74,22 +91,29 @@ None. The milestone's plans are all complete.
 
 ### Blockers/Concerns
 
-- `scripts/build.sh` reads `refs/heads/master` for both forks, so a rebuild
-  does not reproduce the published bytes. `pins.txt` is a receipt, not a
-  guarantee; see `docs/BUILD.md`.
-- arm64 remains artifact-verified only.
+- Byte-identical rebuilds are still not established: the Go patch level follows
+  the runner cache, so two runs of the same commit can differ in `pins.txt`.
+  The inputs are fixed; the toolchain patch is not.
+- The REALITY handshake remains deferred: the shipped pair is a placeholder and
+  the acceptance run measured `alert 40`.
+
+## Quick Tasks Completed
+
+| # | Description | Date | Commit | Status | Directory |
+|---|-------------|------|--------|--------|-----------|
+| 261106-tfx | Close the v0.4.3 follow-ups: pin fork SHAs, execute arm64, conclude licenses | 2026-11-06 | 820b890 | complete | [261106-tfx-close-v0-4-3-follow-ups-pin-fork-shas-ex](./quick/261106-tfx-close-v0-4-3-follow-ups-pin-fork-shas-ex/) |
 
 ## Deferred Items
 
 | Category | Item | Status | Deferred At | Milestone |
 |----------|------|--------|-------------|-----------|
-| Build | Pin `FWDPROXY_SHA` and `L4_SHA` to the release receipt | Open | 2026-11-06 | next milestone |
-| Runtime | arm64 execution | Deferred — artifact verification only | v0.4.2 | v4 delivery |
+| Build | Pin `FWDPROXY_SHA` and `L4_SHA` to the release receipt | Closed — `pins/build-inputs.env` (`0ef98bb`) | 2026-11-06 | v0.4.3 follow-up |
+| Runtime | arm64 execution | Closed — released asset ran on `ubuntu-24.04-arm` (run 42228779590) | v0.4.2 | v0.4.3 follow-up |
 | Protocol | HTTP/3 on `:443` | Removed by design | 2026-11-04 | v0.4.3 |
-| Docs | Licence/SPDX conclusions | Not evidenced | v0.4.2 | v4 delivery |
+| Docs | Licence/SPDX conclusions | Closed — `docs/LICENSING.md` plus `LICENSES/`; repository stays proprietary | v0.4.2 | v0.4.3 follow-up |
 
 ## Session Continuity
 
 Last session: 2026-11-06
-Stopped at: milestone `v0.4.3` delivered and green; no plan is in flight.
-Resume file: .planning/phases/03-publish-v043/03-01-SUMMARY.md
+Stopped at: milestone `v0.4.3` delivered, follow-ups closed, `main` at `820b890`.
+Resume file: .planning/quick/261106-tfx-close-v0-4-3-follow-ups-pin-fork-shas-ex/261106-tfx-SUMMARY.md

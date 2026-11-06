@@ -27,8 +27,8 @@ claim is reproducible from evidence.
 - **Caddy baseline**: `v2.11.7`; the patch and the four module assertions are
   stated against that tag.
 - **One patch**: exactly one `.patch` under `patches/`; a second fails the build.
-- **Forks**: both non-core modules come from `olst57/forwardproxy@naive` and
-  `olst57/caddy-l4@master`.
+- **Forks**: both non-core modules are read from the commits pinned in
+  `pins/build-inputs.env`; branch names are not build inputs.
 - **Build flag**: `--replace` is mandatory with the patch; either alone does not
   compile.
 - **Protocol pin**: `protocols h1 h2` must stay explicit; absence restores
@@ -57,9 +57,8 @@ claim is reproducible from evidence.
 - YAML — GitHub Actions workflows under `.github/workflows/`.
 
 ## Runtime
-
-- Linux `amd64` for execution and runtime tests.
-- Linux `arm64` artifact is produced but never executed.
+- Linux `amd64` for execution and runtime tests on `hw-gz` and CI.
+- Linux `arm64` for execution of the published asset on `ubuntu-24.04-arm`;
 - Windows is authoring-only: it can edit files and run Git, but cannot execute the Linux ELF.
 - Go modules for the upstream and forked Caddy modules.
 - No `package.json`, lockfile, or Node runtime is required by the project itself.
@@ -67,13 +66,13 @@ claim is reproducible from evidence.
 ## Frameworks
 
 - Caddy `v2.11.7` — HTTP server, TLS, reverse proxy, and listener wrapper host.
-- `github.com/olst57/forwardproxy` at branch `naive` — naive forward proxy module.
-- `github.com/olst57/caddy-l4` at branch `master` — layer4 routing.
+- `github.com/olst57/forwardproxy` at the commit pinned in `pins/build-inputs.env` — naive forward proxy module.
+- `github.com/olst57/caddy-l4` at the commit pinned in `pins/build-inputs.env` — layer4 routing.
 - Xray — REALITY inbound on `127.0.0.1:19098`.
 - `scripts/verify.sh` — 26-item offline verifier; no listener bind.
-- `tests/coexist/run.sh` — 7-item live coexistence suite; binds `:443`.
+- `tests/coexist/run.sh` — 8-item live coexistence suite; binds `:443`.
 - `tests/probes/*.sh` — Gate 0 probes.
-- `xcaddy` — newest stable tag at build time.
+- `xcaddy` `v0.4.7` — pinned in `pins/build-inputs.env`.
 - Go `1.26.x` — exact patch recorded per run in `dist/pins.txt`.
 - `jq` — offline JSON assertions.
 - `curl`, `openssl`, `python3`, `iproute2` — coexistence suite.
@@ -81,8 +80,8 @@ claim is reproducible from evidence.
 ## Key Dependencies
 
 - Caddy `v2.11.7` — the baseline the patch and four module assertions target.
-- `forwardproxy@naive` — calls `caddyhttp.IdleTimeoutsFromContext`, absent in Caddy `v2.11.7`.
-- `caddy-l4@master` — provides `layer4.handlers.proxy`, `caddy.listeners.layer4`, and `layer4.matchers.quic`.
+- `forwardproxy` at the pinned commit — calls `caddyhttp.IdleTimeoutsFromContext`, absent in Caddy `v2.11.7`.
+- `caddy-l4` at the pinned commit — provides `layer4.handlers.proxy`, `caddy.listeners.layer4`, and `layer4.matchers.quic`.
 - `caddy-read-idle-timeout.patch` — adds the missing symbol; exactly one patch is allowed.
 - `jq` — mandatory for the offline verifier; absence is a hard failure.
 - `ss` from `iproute2` — CO-7 socket assertion.

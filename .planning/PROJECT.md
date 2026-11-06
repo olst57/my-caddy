@@ -37,29 +37,36 @@ claim is reproducible from evidence.
   one-command verifier — existing, Sprint 7.
 - ✓ README provenance: upstreams, forks, the one mandatory patch, build inputs,
   and honest limitations — existing, v0.4.2.
+- ✓ The verification slice is frozen as a reviewable commit: 26 offline items,
+  8 coexistence items, and blocking CI — v0.4.3.
+- ✓ Runtime-acceptance findings are closed or explicitly dispositioned; the
+  `deploy/` freeze keeps its single amendment — v0.4.3.
+- ✓ `v0.4.3` is published only after both suites are green, with four assets
+  and redacted evidence that describe the downloaded release binary — release
+  435420474.
+- ✓ Both fork commits, the Caddy tag/commit and xcaddy are fixed in
+  `pins/build-inputs.env`; a real CI build reproduced the published sha256 —
+  commit `0ef98bb`, build run 42224616127.
+- ✓ The published arm64 asset was executed on a real `ubuntu-24.04-arm`
+  runner: 26 offline and 8 coexistence items passed — run 42228779590.
+- ✓ Third-party licenses and SPDX identifiers are recorded, and the
+  repository's all-rights-reserved default is explicit — commit `820b890`.
 
 ### Active
 
-- [ ] Freeze the current verification slice into a reviewable commit: the
-  26-item offline verifier, the 7-item coexistence suite, and the CI workflow
-  that runs both.
-- [ ] Close the remaining `v0.4.0` runtime-acceptance findings: REALITY
-  placeholder defaults, the `probe_resistance` target collision, and evidence
-  completeness.
-- [ ] Publish `v0.4.3` only after both suites are green, with artifacts, pins,
-  and redacted evidence that match the tagged tree.
+- [ ] None. `v0.4.3` is delivered; the next milestone is not planned.
 
 ### Out of Scope
 
 - HTTP/3 on `:443` — removed by the `protocols h1 h2` pin because one SNI with
   two transport identities on one port is the coexistence hazard this project
   avoids.
-- Running the arm64 artifact — it is artifact-verified only; no run is claimed.
 - Docker, a packaged distribution, BBR, or upstream cascades — outside the v4
   delivery shape.
 - Public-internet HTTP/3 measurement — HTTP/3 is off by design.
-- Licence or SPDX conclusions — not evidenced in this repository.
 - Real domains, credentials, UUIDs, or REALITY key material — placeholders only.
+- Choosing an open-source license for the repository — that is the owner's
+  decision; this slice records the existing all-rights-reserved default.
 
 ## Context
 
@@ -88,8 +95,8 @@ because the suite binds `:443` and samples sockets with `ss`.
 - **Caddy baseline**: `v2.11.7`; the patch and the four module assertions are
   stated against that tag.
 - **One patch**: exactly one `.patch` under `patches/`; a second fails the build.
-- **Forks**: both non-core modules come from `olst57/forwardproxy@naive` and
-  `olst57/caddy-l4@master`.
+- **Forks**: both non-core modules are read from the commits pinned in
+  `pins/build-inputs.env`; branch names are not build inputs.
 - **Build flag**: `--replace` is mandatory with the patch; either alone does not
   compile.
 - **Protocol pin**: `protocols h1 h2` must stay explicit; absence restores
@@ -116,6 +123,9 @@ because the suite binds `:443` and samples sockets with `ss`.
 | Keep the `deploy/` freeze at one amendment | A second exception would weaken a supply-chain guard for a rule the docs already carry | ✓ Good — option A chosen 2026-11-05 |
 | Verify offline first, then live | Config shape is cheap to check; only a live stack proves coexistence | ✓ Good |
 | Treat Windows as authoring-only | The binary is a Linux ELF; runtime checks need Linux/root | ✓ Good |
+| Pin both fork commits in one tracked file | A branch head changed the published binary with no commit here; a receipt is not a build input | ✓ Good — `0ef98bb` |
+| Execute the released arm64 asset on an ARM runner | Artifact inspection is not execution; a real host is the only way to earn the claim | ✓ Good — run 42228779590 |
+| Record licenses, keep the repository proprietary | The owner never selected an open-source license; granting rights silently would be irreversible | ✓ Good — `LicenseRef-Proprietary` |
 
 ## Evolution
 
@@ -135,4 +145,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-11-05 after initialization*
+*Last updated: 2026-11-06 after the v0.4.3 follow-ups*
