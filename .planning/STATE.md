@@ -5,11 +5,11 @@ milestone_name: Verification gate
 current_phase: 3
 current_phase_name: Publish v0.4.3
 status: complete
-stopped_at: milestone `v0.4.3` delivered, follow-ups closed, `main` at `820b890`.
-last_updated: "2026-11-06T14:01:13.519Z"
-last_activity: 2026-11-06
-last_activity_desc: "closed the release follow-ups at `820b890`: both"
-state_head: 820b8903b694c1a063e32d54cd216e8a114fee4e
+stopped_at: quick task `261106-wsw` complete; the delivery toolchain is pinned at `decb4cf`.
+last_updated: "2026-11-06T16:11:17.895Z"
+last_activity: 2026-11-07
+last_activity_desc: "pinned Go 1.26.9 to the official naiveproxy toolchain"
+state_head: decb4cf36b58492961565397bce1ce08f098a3a7
 progress:
   total_phases: 3
   completed_phases: 3
@@ -26,18 +26,17 @@ See: .planning/PROJECT.md (updated 2026-11-06)
 
 **Core value:** Three roles coexist on one binary, one Caddyfile, and one
 `:443` without interference, and that claim is reproducible from evidence.
-**Current focus:** Milestone `v0.4.3` delivered and its three follow-ups are
-closed; next milestone not planned.
+**Current focus:** Milestone `v0.4.3` delivered; the delivery toolchain now
+matches the official naiveproxy Caddy build at `go1.26.9`.
 
 ## Current Position
 
 Phase: 3 of 3 (Publish v0.4.3) — complete
 Plan: 2 of 2 complete
-Status: Phase complete — milestone delivered
-Last activity: 2026-11-06 — closed the release follow-ups at `820b890`: both
-fork commits are pinned in `pins/build-inputs.env`, the published arm64 asset
-passed 26 + 8 items on a real `ubuntu-24.04-arm` runner (run 42228779590), and
-the license/notice set is attached to release 435420474.
+Status: Phase complete — milestone delivered; post-release toolchain pin applied
+Last activity: 2026-11-07 — quick task `261106-wsw` pinned `go1.26.9` from the
+official naiveproxy Caddy binary. The pinned toolchain rebuilt on `hw-gz` and
+passed 26 + 8 items; CI verify, build and gate0 are green at `decb4cf`.
 
 Progress: [██████████] 100%
 
@@ -84,6 +83,9 @@ affecting current work:
   was run on `ubuntu-24.04-arm` and passed the same two suites.
 - The repository is `LicenseRef-Proprietary` and all rights reserved; the
   third-party obligations are recorded, not relicensed.
+- The delivery build pins Go to `1.26.9`, the patch level measured in the Go
+  build metadata of the official naiveproxy Caddy `v2.11.7-naive2` binary.
+  `PIN_GO_VERSION` is not overridable, and `v0.4.3` remains `go1.26.10`.
 
 ### Pending Todos
 
@@ -91,9 +93,9 @@ None. The milestone's plans are all complete.
 
 ### Blockers/Concerns
 
-- Byte-identical rebuilds are still not established: the Go patch level follows
-  the runner cache, so two runs of the same commit can differ in `pins.txt`.
-  The inputs are fixed; the toolchain patch is not.
+- Byte-identical rebuilds are still not established. The Go patch level is now
+  fixed at `1.26.9`, but the same sources produced different amd64 bytes on
+  `hw-gz` (`872cae…`) and CI (`c780d1…`); build IDs and host paths still vary.
 - The REALITY handshake remains deferred: the shipped pair is a placeholder and
   the acceptance run measured `alert 40`.
 
@@ -101,12 +103,14 @@ None. The milestone's plans are all complete.
 
 | # | Description | Date | Commit | Status | Directory |
 |---|-------------|------|--------|--------|-----------|
+| 261106-wsw | Pin Go 1.26.9 to match the official naiveproxy Caddy build | 2026-11-07 | decb4cf | complete | [261106-wsw-pin-go-1-26-9-to-match-naiveproxy-offici](./quick/261106-wsw-pin-go-1-26-9-to-match-naiveproxy-offici/) |
 | 261106-tfx | Close the v0.4.3 follow-ups: pin fork SHAs, execute arm64, conclude licenses | 2026-11-06 | db05ba0 | complete | [261106-tfx-close-v0-4-3-follow-ups-pin-fork-shas-ex](./quick/261106-tfx-close-v0-4-3-follow-ups-pin-fork-shas-ex/) |
 
 ## Deferred Items
 
 | Category | Item | Status | Deferred At | Milestone |
 |----------|------|--------|-------------|-----------|
+| Build | Byte-identical rebuilds | Open — inputs fixed, but `hw-gz` and CI produced different amd64 bytes | 2026-11-07 | post-v0.4.3 |
 | Build | Pin `FWDPROXY_SHA` and `L4_SHA` to the release receipt | Closed — `pins/build-inputs.env` (`0ef98bb`) | 2026-11-06 | v0.4.3 follow-up |
 | Runtime | arm64 execution | Closed — released asset ran on `ubuntu-24.04-arm` (run 42228779590) | v0.4.2 | v0.4.3 follow-up |
 | Protocol | HTTP/3 on `:443` | Removed by design | 2026-11-04 | v0.4.3 |
@@ -114,6 +118,6 @@ None. The milestone's plans are all complete.
 
 ## Session Continuity
 
-Last session: 2026-11-06
-Stopped at: milestone `v0.4.3` delivered, follow-ups closed, `main` at `db05ba0`.
-Resume file: .planning/quick/261106-tfx-close-v0-4-3-follow-ups-pin-fork-shas-ex/261106-tfx-SUMMARY.md
+Last session: 2026-11-07
+Stopped at: quick task `261106-wsw` complete; toolchain pinned at `decb4cf`.
+Resume file: .planning/quick/261106-wsw-pin-go-1-26-9-to-match-naiveproxy-offici/261106-wsw-SUMMARY.md
