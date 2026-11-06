@@ -32,11 +32,17 @@ when the source moves to a fork. How each module is configured belongs to
 
 ## Build toolchain and Go
 
-The binary is assembled by `github.com/caddyserver/xcaddy`, always at the
-newest stable tag rather than at a fixed one. In the `v0.4.2` build that lookup
-resolved to `v0.4.7`. Go comes from the `1.26.x` line in CI; the `v0.4.2` build
-reported `go1.26.10`. Both are recorded as the values that run actually used,
-not as values a future run is guaranteed to use.
+The binary is assembled by `github.com/caddyserver/xcaddy` at `v0.4.7`, and Go
+is fixed at `1.26.9`. Both are concrete values in
+`pins/build-inputs.env`, not ranges. The Go value is copied into the four
+workflows that call `setup-go`, and `tests/pins/check.sh` fails if any copy
+drifts from the pins file.
+
+The patch level is measured, not guessed. The official naiveproxy Caddy release
+`v2.11.7-naive2` reports `go1.26.9` in the Go build metadata embedded in its
+published `caddy` binary. The `v0.4.3` build here predates this pin and reports
+`go1.26.10` in its receipt and evidence; those historical records are not
+rewritten.
 
 ## The single patch, and why it is mandatory
 
@@ -174,10 +180,11 @@ domain that resolves and serves TLS. A mismatch fails at connection time.
 listener, so HTTP/3 is not offered at all. Earlier local measurements of H3
 predate the pin and are history, not a description of the shipped config.
 
-**Byte identity across reruns.** The Go patch level floats with the runner
-cache, so `1.26.x` can land on a different patch between two runs. Two reruns of
-the same commit are therefore not byte-identical, and the difference shows up in
-the `go_version` field of `pins.txt`.
+**Byte identity across reruns.** The toolchain is now pinned, but a
+byte-identical rebuild is still unproven: two clean builds of the same commit
+with the same inputs have not been compared. Build paths, build IDs, or other
+compiler inputs may still produce different bytes. The fixed Go patch removes
+toolchain-version drift; it is not a reproducibility claim by itself.
 
 ## Quick start
 

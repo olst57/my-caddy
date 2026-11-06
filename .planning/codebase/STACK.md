@@ -45,7 +45,7 @@ last_mapped_at: 2026-11-05
 
 **Build/Dev:**
 - `xcaddy` `v0.4.7` — pinned in `pins/build-inputs.env`.
-- Go `1.26.x` — exact patch recorded per run in `dist/pins.txt`.
+- Go `1.26.9` — pinned in `pins/build-inputs.env` and recorded in `dist/pins.txt`.
 - `jq` — offline JSON assertions.
 - `curl`, `openssl`, `python3`, `iproute2` — coexistence suite.
 

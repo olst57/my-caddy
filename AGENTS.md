@@ -73,7 +73,7 @@ claim is reproducible from evidence.
 - `tests/coexist/run.sh` — 8-item live coexistence suite; binds `:443`.
 - `tests/probes/*.sh` — Gate 0 probes.
 - `xcaddy` `v0.4.7` — pinned in `pins/build-inputs.env`.
-- Go `1.26.x` — exact patch recorded per run in `dist/pins.txt`.
+- Go `1.26.9` — pinned in `pins/build-inputs.env` and recorded in `dist/pins.txt`.
 - `jq` — offline JSON assertions.
 - `curl`, `openssl`, `python3`, `iproute2` — coexistence suite.
 

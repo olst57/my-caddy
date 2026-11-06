@@ -56,16 +56,31 @@ caddy_source_head=72dd0fb067f6d7826c7f79907670ba4a713bfe37
 forwardproxy_sha=e747854e78743dba85c039b38ed185fb11d93667
 caddy_l4_sha=96e1a6bf063c206c3bd09ca6dc4a0484a158d83f
 xcaddy_version=v0.4.7
+go_version=go1.26.9
 patch=caddy-read-idle-timeout.patch
 ```
 
 ### The inputs are fixed in `pins/build-inputs.env`
 
-`scripts/build.sh` reads six values from that file and does not query a branch
-head. `CADDY_COMMIT` is checked against the cloned tag, so a moved tag fails
-before compilation. Environment variables with the old names (`CADDY_TAG`,
+`scripts/build.sh` sources the file and does not query a branch head.
+`CADDY_COMMIT` is checked against the cloned tag, so a moved tag fails before
+compilation. Environment variables with the old names (`CADDY_TAG`,
 `FWDPROXY_SHA`, `L4_SHA`, `XCADDY_VERSION`) still override the file for a
-one-off rebuild; the default never floats.
+one-off rebuild; the default never floats. `PIN_GO_VERSION` is deliberately
+not overridable: the delivery build must run on exactly `go1.26.9`.
+
+The Go pin comes from the official naiveproxy Caddy release
+`v2.11.7-naive2`. Its published `caddy` binary reports `go1.26.9` in the Go
+build metadata; the downloaded archive has sha256
+`c273dc07dd79c5919f97639cbdcb559d40ce90475dbd8aac80641b0a8c8065ff`,
+and the contained `caddy` has sha256
+`ee571de2ed6d68dd29c1f83e5dbc62d043982c65d73ea230b78389253743527c`.
+Before compiling, `scripts/build.sh` sets `GOTOOLCHAIN=local` and compares
+`go env GOVERSION` with the pin, so a different installed patch fails closed
+instead of silently downloading a replacement toolchain.
+
+The `v0.4.3` receipt records `go1.26.10`. That release, its assets, and its
+evidence are historical records and are not rewritten by this pin.
 
 This closes the defect the v0.4.3 release exposed. The binary used for the first
 `hw-gz` measurement was built when `caddy-l4` head was `f607ccea…`; by the time
