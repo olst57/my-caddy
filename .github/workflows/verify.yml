@@ -52,6 +52,8 @@ jobs:
           sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends jq
           jq --version
+      - name: Build inputs are pinned
+        run: bash tests/pins/check.sh
       - name: Build amd64 artifact
         run: bash scripts/build.sh --arch amd64
       - name: Offline verifier

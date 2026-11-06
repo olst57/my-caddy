@@ -1,0 +1,131 @@
+name: verify-arm64-release
+
+# Executes the published ARM64 asset on a real GitHub-hosted ARM64 runner.
+# This is deliberately separate from verify.yml: the normal gate builds and
+# tests on amd64, while this workflow answers the narrower provenance question
+# "does the artifact attached to the release run on arm64?".
+#
+# It is manual because it pins one historical release. The defaults are the
+# v0.4.3 asset and its recorded sha256; changing either is a deliberate review
+# action, not a value discovered at run time.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag whose arm64 artifact should be executed
+        required: true
+        default: v0.4.3
+        type: string
+      asset_sha256:
+        description: Expected sha256 of that release's caddy-linux-arm64
+        required: true
+        default: 76760bdf0ebf3447246806dbc8f18ee6a89871423625dec0a3b0d5798f9abd36
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: 1.26.x
+
+jobs:
+  execute:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Assert this is a real ARM64 runner
+        run: |
+          set -euo pipefail
+          arch="$(uname -m)"
+          printf 'runner_arch=%s\n' "$arch"
+          [ "$arch" = "aarch64" ]
+      - name: Install runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            curl jq openssl python3 iproute2 ca-certificates
+          jq --version
+          curl --version | head -n1
+          openssl version
+          python3 --version
+          ss -V
+      - name: Download the published ARM64 asset
+        run: |
+          set -euo pipefail
+          mkdir -p dist evidence/arm64 .gate/arm64
+          url="${{ github.server_url }}/${{ github.repository }}/releases/download/${{ inputs.tag }}/caddy-linux-arm64"
+          printf 'download=%s\n' "$url"
+          curl --fail --location --retry 3 --retry-delay 2 \
+            --output dist/caddy-linux-arm64 "$url"
+          chmod +x dist/caddy-linux-arm64
+      - name: Check the recorded hash before execution
+        run: |
+          set -euo pipefail
+          printf '%s  %s\n' \
+            '${{ inputs.asset_sha256 }}' \
+            'dist/caddy-linux-arm64' | sha256sum -c -
+      - name: Inspect the ELF and module set
+        run: |
+          set -euo pipefail
+          {
+            printf '# arm64 release-binary record for %s\n' '${{ inputs.tag }}'
+            printf 'run: %s/%s/actions/runs/%s\n' \
+              '${{ github.server_url }}' '${{ github.repository }}' '${{ github.run_id }}'
+            printf 'runner_arch: %s\n' "$(uname -m)"
+            printf 'kernel: %s\n' "$(uname -srm)"
+            printf 'binary: dist/caddy-linux-arm64 (GitHub release asset)\n'
+          } > evidence/arm64/host.txt
+          file dist/caddy-linux-arm64 | tee -a evidence/arm64/host.txt
+          sha256sum dist/caddy-linux-arm64 | tee -a evidence/arm64/host.txt
+          dist/caddy-linux-arm64 version | tee -a evidence/arm64/host.txt
+          go version -m dist/caddy-linux-arm64 > .gate/arm64/buildinfo.txt
+          dist/caddy-linux-arm64 list-modules > evidence/arm64/modules.txt
+          for module in \
+            http.handlers.forward_proxy \
+            layer4.handlers.proxy \
+            caddy.listeners.layer4 \
+            layer4.matchers.quic; do
+            grep -qx "$module" evidence/arm64/modules.txt
+          done
+      - name: Offline verifier on arm64
+        env:
+          CADDY_BIN: dist/caddy-linux-arm64
+        run: |
+          set -o pipefail
+          bash scripts/verify.sh 2>&1 | tee evidence/arm64/verify-26.log
+      - name: Coexistence suite on arm64
+        env:
+          CADDY_BIN: dist/caddy-linux-arm64
+          CO_TARGET: www.apple.com:443
+        run: |
+          set -o pipefail
+          sudo --preserve-env=CADDY_BIN,CO_TARGET \
+            bash tests/coexist/run.sh "$PWD" 2>&1 | tee evidence/arm64/coexist-8.log
+      - name: Show coexistence logs
+        if: always()
+        run: |
+          for file in caddy.log stub.log backend.log site.hdr tunnel.json tunnel.err decoy.out; do
+            echo "--- $file ---"
+            tail -n 40 ".gate/coexist/$file" 2>/dev/null || true
+          done
+      - name: Upload arm64 execution evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64b875d1fc6a0a # v7.0.1
+        with:
+          name: arm64-execution
+          path: |
+            evidence/arm64/
+            .gate/arm64/
+            .gate/coexist/*.log
+            .gate/coexist/*.hdr
+            .gate/coexist/*.json
+            .gate/coexist/*.jsonl
+            .gate/coexist/*.out
+          if-no-files-found: error

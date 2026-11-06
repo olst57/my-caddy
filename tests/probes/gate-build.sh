@@ -11,11 +11,11 @@
 # xcaddy writes its output as ./caddy in the working directory, which is $GATE_DIR,
 # so a source directory named "caddy" would collide with the output binary path.
 #
-# The build command below uses pinned 40-hex SHAs only. The branch names
-# (olst57/forwardproxy `naive`, olst57/caddy-l4 `master`) are resolved to SHAs in
-# the `pins` job and never appear as build arguments. The repositories must be
-# this project's forks, matching scripts/build.sh: a fork SHA does not exist in
-# the upstream repository, so mixing the two makes the build fail to resolve.
+# The build command below uses pinned 40-hex SHAs only. The `pins` job reads
+# those values from pins/build-inputs.env; no branch name is resolved at run
+# time. The repositories must be this project's forks, matching
+# scripts/build.sh: a fork SHA does not exist in the upstream repository, so
+# mixing the two makes the build fail to resolve.
 set -uo pipefail
 
 REPO_ROOT="${1:?usage: gate-build.sh <repo-root> [extra xcaddy args...]}"

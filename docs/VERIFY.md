@@ -74,14 +74,16 @@ quoted below is historical and was manual: v0.2.0 in a Codespace, v0.2.1 on
 green.
 
 The release assets come from the `build` workflow, which runs on the release
-event. Its inputs are not fully fixed: the two fork SHAs are resolved from
-`refs/heads/master` at build time (`docs/BUILD.md` §The two fork SHAs are
-resolved at build time), and `caddy-l4` head advanced between the first
-measurement and the release build. The gate was therefore re-run on the
-downloaded `caddy-linux-amd64` asset, sha256
+event. At v0.4.3 its inputs were not fully fixed: the two fork SHAs were
+resolved from `refs/heads/master` at build time, and `caddy-l4` head advanced
+between the first measurement and the release build. The gate was therefore
+re-run on the downloaded `caddy-linux-amd64` asset, sha256
 `693057c2f596e163144eb0d2991bd4c8b19cadb351199cb8cc87b183647618f2`:
 `PASS=26 FAIL=0` and `CO-1` through `CO-8` PASS. `evidence/v0.4.3/` is that
-second run, so the evidence describes the artifact a reader downloads.
+second run, so the evidence describes the artifact a reader downloads. The
+follow-up moves those inputs into `pins/build-inputs.env`; `tests/pins/check.sh`
+now runs in the `verify` and `build` workflows, and `docs/BUILD.md` §The inputs
+are fixed in `pins/build-inputs.env` describes the mechanism.
 
 The item set quoted below is the 26-item set that the workflow runs. The
 workflow exists so a regression is caught without a human re-running anything;

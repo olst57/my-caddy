@@ -47,30 +47,38 @@ of the tracked tree.
 Every build input is a concrete commit or tag, recorded in `dist/pins.txt` so a
 run states exactly what it built. The values in this slice are:
 
+The fixed values live in `pins/build-inputs.env`, and `dist/pins.txt` records
+what a run actually compiled:
+
 ```text
 caddy_tag=v2.11.7
 caddy_source_head=72dd0fb067f6d7826c7f79907670ba4a713bfe37
 forwardproxy_sha=e747854e78743dba85c039b38ed185fb11d93667
-caddy_l4_sha=f607ccea1b7dbe61cfcec089f2005621c61f7e6c
+caddy_l4_sha=96e1a6bf063c206c3bd09ca6dc4a0484a158d83f
 xcaddy_version=v0.4.7
 patch=caddy-read-idle-timeout.patch
 ```
 
-### The two fork SHAs are resolved at build time
+### The inputs are fixed in `pins/build-inputs.env`
 
-`caddy_tag` and the patch are fixed, but `forwardproxy_sha` and `caddy_l4_sha`
-are **not** constants: `scripts/build.sh` resolves them from
-`refs/heads/master` of the two forks unless `FWDPROXY_SHA` or `L4_SHA` is
-passed in. `dist/pins.txt` is therefore a receipt for the run that produced it,
-not a promise that a later run rebuilds the same bytes.
+`scripts/build.sh` reads six values from that file and does not query a branch
+head. `CADDY_COMMIT` is checked against the cloned tag, so a moved tag fails
+before compilation. Environment variables with the old names (`CADDY_TAG`,
+`FWDPROXY_SHA`, `L4_SHA`, `XCADDY_VERSION`) still override the file for a
+one-off rebuild; the default never floats.
 
-The v0.4.3 release makes that concrete. The binary used for the first
+This closes the defect the v0.4.3 release exposed. The binary used for the first
 `hw-gz` measurement was built when `caddy-l4` head was `f607ccea…`; by the time
 the release workflow ran, head had advanced to `96e1a6bf…`, so the published
-asset has a different sha256. The gate was re-run against the **release asset**
-before the evidence was finalized, and that is the run `evidence/v0.4.3/`
-records. Pinning the forks to the receipt SHAs is the open follow-up; until
-then, quote `pins.txt` from the artifact you actually downloaded.
+asset had a different sha256 from the tested tree. v0.4.3 was handled by
+re-running the gate on the downloaded asset; the follow-up pins the input so
+the mismatch cannot recur.
+
+Changing a pin is a reviewable edit plus a rebuild. `tests/pins/check.sh`
+verifies the file shape, refuses any `git ls-remote` in the two build paths,
+runs `scripts/build.sh --print-pins`, and (with `--pins dist/pins.txt`) checks
+the receipt against the file. It runs in the `verify` workflow before the
+artifact is built and again in `build` after both architectures are built.
 
 ## The one patch, and why `--replace` is mandatory
 
@@ -88,7 +96,7 @@ source tree is used instead of the module proxy's copy of Caddy:
 --with    github.com/mholt/caddy-l4=github.com/mholt/caddy-l4@<sha>
 ```
 
-`scripts/build.sh` is the executable form of this. It resolves the pins, clones
+`scripts/build.sh` is the executable form of this. It reads the pins, clones
 the tag, applies `patches/caddy-read-idle-timeout.patch`, asserts the
 post-conditions, builds both architectures, and writes `dist/SHA256SUMS` and
 `dist/pins.txt`. It is the delivery build script; `tests/probes/gate-build.sh`
