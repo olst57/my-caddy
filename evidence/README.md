@@ -108,6 +108,25 @@ grep -nE '([0-9]{1,3}\.){3}[0-9]{1,3}' .gate/release/SPRINT4-SUMMARY.md .gate/re
 
 依据是它被编译进 Caddy 自身：`dist/caddy-linux-amd64` 与 `dist/caddy-linux-arm64` 各命中 52 次，且出现在 Caddy 的提示串中（如 `(you might be prompted for …)`、`The … to hash`、`username and … cannot be empty`）。每轮运行的口令不会出现在厂商二进制的字符串表里，更不会两个架构命中数完全相同。三处的 `od -c` 原始字节与逐处定性见 `.gate/release/F9-REPORT.md` 的 F-10 一节。
 
+## E2E 报告（2026-11-06）—— 索引，不是证据副本
+
+`docs/E2E-NAIVE-REALITY-2026-11-06.md` 是一次**隔离测试栈**上的 naive + REALITY
+端到端实测报告，不是本目录的脱敏副本，也没有对应的原始捕获。它记在这里是为了让审计者
+从证据索引也能找到它，并同时看到它的边界：
+
+- 拓扑：客户端 → 测试 Caddy `:8443` → layer4（REALITY SNI → `127.0.0.1:19099`，
+  PROXY v2）／`forward_proxy`／`reverse_proxy`。
+- 被测二进制：`v0.4.3` 发布资产，sha256 `693057c2…618f2`。
+- 结论：REALITY-01…07、NAIVE-01…06、SITE/TLS/NET/STAB/CLEAN 各断言组按报告所述通过；
+  REALITY-07 标注为 LIMITATION。
+- 未留存：原始日志与 pcap。报告第 7 节明确说明「报告不能当作原始捕获」，因此本目录
+  **不新增**任何 `v0.5.0` 之前的 E2E 文件，也不从报告正文回填日志。
+- 未证明：自签证书、非 443 端口、测试 SNI 都不代表生产隐蔽性；长时压测、主动探测、
+  DPI、密钥轮换均未覆盖。
+
+把它变成可重复门禁的工作在里程碑 `v0.5.0`（`E2E-01`…`E2E-04`），届时原始日志会先落
+`.gate/`，再用 `scripts/redact-evidence.sh` 生成 `evidence/v0.5.0/`。
+
 ## v0.4.3 — 运行时验收证据（2026-11-05）
 
 - 输入：`.gate/v043/`（只读，未改动）

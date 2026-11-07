@@ -1,0 +1,28 @@
+{
+  "contract": "1.0.0",
+  "flavor": "core",
+  "milestone": "v0.5.0 — REALITY closure and E2E regression harness",
+  "phases": [
+    {
+      "number": "4",
+      "name": "REALITY E2E harness",
+      "status": "pending"
+    },
+    {
+      "number": "5",
+      "name": "naive/ACL assertions and fixture guards",
+      "status": "pending"
+    },
+    {
+      "number": "6",
+      "name": "Stability smoke, evidence, and release decision",
+      "status": "pending"
+    }
+  ],
+  "next": {
+    "command": "$gsd-progress --next",
+    "label": "Advance to the next step",
+    "reason": "Phase 1 of 3 · executing"
+  },
+  "updated_at": "2026-11-07T02:11:35.358Z"
+}

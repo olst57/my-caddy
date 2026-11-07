@@ -19,6 +19,26 @@ Three roles — website, naiveproxy, and REALITY+Vision — coexist on one binar
 one Caddyfile, and one `:443` without interfering with each other, and that
 claim is reproducible from evidence.
 
+## Current Milestone: v0.5.0 REALITY closure and E2E regression harness
+
+**Goal:** Turn the REALITY and naive end-to-end results that were measured by
+hand into a repository-owned regression suite, and use it to close the last
+unproven leg of the three-role claim.
+
+**Target features:**
+
+- A REALITY handshake harness: a real Xray server behind layer4, a second Xray
+  client through `:443`, a VLESS/Vision tunnel, and an inner HTTP request that
+  must return the expected body with no `alert 40`.
+- Outer-certificate masquerade assertions: an unauthenticated probe must
+  receive the certificate of the chosen real destination, not the site's.
+- PROXY v2 and negative-control assertions that fail closed on a wrong UUID,
+  wrong publicKey, wrong shortId, wrong credential, or private target.
+- Test-fixture guards that make the `:port, host:port` address shape and the
+  `probe_resistance` ≠ target rule machine-checked rather than prose.
+- Redacted evidence under `evidence/v0.5.0/`, produced from raw logs that were
+  captured and then scrubbed, not from a narrative report.
+
 ## Requirements
 
 ### Validated
@@ -54,7 +74,22 @@ claim is reproducible from evidence.
 
 ### Active
 
-- [ ] None. `v0.4.3` is delivered; the next milestone is not planned.
+- [ ] `E2E-01` REALITY handshake is automated and fails closed without key
+  material.
+- [ ] `E2E-02` The outer certificate of a REALITY probe matches the real
+  destination.
+- [ ] `E2E-03` layer4 sends a well-formed PROXY v2 header to the upstream.
+- [ ] `E2E-04` Wrong UUID, wrong publicKey, and wrong shortId cannot open a
+  tunnel.
+- [ ] `E2E-05` naive negative controls and the private-target ACL are asserted
+  on body, upstream data, and the 403 log, not on a status code.
+- [ ] `E2E-06` A non-443 test fixture must use `:port, host:port` and must
+  pin `protocols h1 h2`.
+- [ ] `E2E-07` The unknown/no-SNI fallback posture is decided and checked.
+- [ ] `E2E-08` The harness survives 30 serial requests and 8 concurrent ones
+  with zero errors.
+- [ ] `EVID-01` Evidence for the E2E suite is captured, redacted, and indexed.
+- [ ] `REL-01` A `v0.5.0` release happens only after explicit approval.
 
 ### Out of Scope
 
@@ -72,16 +107,32 @@ claim is reproducible from evidence.
 
 The v4 specification (`../my-caddy-v4-SPEC.md`) defines Sprints 1–7 with
 acceptance criteria `S1`–`S12` and edge cases `E1`–`E13`. Those sprints are
-delivered through tag `v0.4.2`. The current work is the next slice: the offline
-verifier grew from 24 to 26 items, a live coexistence suite was added under
-`tests/coexist/`, and `.github/workflows/verify.yml` was added to run both.
-Those changes are in the working tree on `feat/protocol-pin`, not on `main`.
+delivered through tag `v0.4.2`. Milestone `v0.4.3` froze the verification slice
+(26 offline items plus 8 coexistence items), closed the runtime-acceptance
+findings, and published a tag whose assets and redacted evidence describe the
+downloaded artifact. That milestone is archived under
+`.planning/milestones/v0.4.3-phases/`.
+
+The current work is milestone `v0.5.0`. A REALITY end-to-end round was already
+run by hand against an isolated test stack on a separate machine: layer4
+forwarded REALITY SNI traffic to Xray with PROXY v2, an Xray client opened a
+VLESS/Vision tunnel, the outer certificate matched a real destination, and
+wrong UUID / publicKey / shortId all failed. `docs/E2E-NAIVE-REALITY-2026-11-06.md`
+records that round, its fixtures, and its limitations. It is a tested report,
+not a production acceptance and not a substitute for raw captures.
+
+The point of `v0.5.0` is therefore not to re-measure by hand. It is to make the
+same assertions executable in this repository, so a future change to the
+Caddyfile, the layer4 matcher, the forwardproxy fork, or the Xray config cannot
+silently break the REALITY leg.
 
 The v0.4.0 runtime acceptance round passed 12 of 21 items, failed 7, and left 2
 untested. The disposition is recorded in
 `.gate/PM-DISPOSITION-RUNTIME-ACCEPT.md`. Two findings still matter most:
 REALITY's shipped placeholder `dest` was rejected by the destination, and
 naive's `probe_resistance` target collided with the destination being proxied.
+Both are now closed: the paired-replacement rule is documented and checked, and
+CO-8 asserts the decoy is not the target.
 
 The project runs in two environments. Windows is authoring-only: it cannot
 execute the Linux ELF. A Linux host with root runs the coexistence suite,
@@ -126,6 +177,9 @@ because the suite binds `:443` and samples sockets with `ss`.
 | Pin both fork commits in one tracked file | A branch head changed the published binary with no commit here; a receipt is not a build input | ✓ Good — `0ef98bb` |
 | Execute the released arm64 asset on an ARM runner | Artifact inspection is not execution; a real host is the only way to earn the claim | ✓ Good — run 42228779590 |
 | Record licenses, keep the repository proprietary | The owner never selected an open-source license; granting rights silently would be irreversible | ✓ Good — `LicenseRef-Proprietary` |
+| Turn the hand-run REALITY round into a repository test | A one-off measurement cannot catch a regression; the report is evidence of a state, not a guard | Pending — v0.5.0 |
+| Keep the E2E stack on isolated ports | `:443` on the test host is occupied by production; the delivery address shape is replicated, not the delivery port | Pending — v0.5.0 |
+| Fail closed when REALITY key material is absent | A skipped handshake test that reports PASS is worse than no test | Pending — v0.5.0 |
 
 ## Evolution
 
@@ -145,4 +199,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-11-06 after the v0.4.3 follow-ups*
+*Last updated: 2026-11-07 when milestone v0.5.0 started*

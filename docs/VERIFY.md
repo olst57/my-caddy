@@ -762,9 +762,34 @@ RTA-11, RTA-12, RTA-15, RTA-20), and two are `deferred` (RTA-13, RTA-14).
 
 The deferred rows are the REALITY measurements above. They close only with a
 handshake through the tunnel against a replaced destination, and nothing in
-this tree performs that handshake. That table is the authoritative closure
-record for the round; it is linked here so a release check does not have to
-trust this paragraph.
+this tree performs that handshake **as of `v0.4.3`**. That table is the
+authoritative closure record for the round; it is linked here so a release
+check does not have to trust this paragraph.
+
+### A REALITY round was run by hand on 2026-11-06
+
+`docs/E2E-NAIVE-REALITY-2026-11-06.md` records a REALITY and naive round that
+was executed against an **isolated test stack**, not the delivery host. The
+stack ran a test Caddy with layer4 forwarding REALITY SNI traffic to a local
+Xray server with PROXY v2, a second Xray client opening a VLESS/Vision tunnel
+through the same listener, and a stub site behind `reverse_proxy`.
+
+The round reported REALITY-01 through REALITY-07 as passing, including the
+outer certificate matching the configured real destination, a successful inner
+HTTP request through the tunnel with no `alert 40`, and wrong UUID /
+publicKey / shortId all failing. It also recorded findings F-01 through F-08,
+which are why `v0.5.0` exists: the address shape of a non-443 fixture, the
+`probe_resistance` ≠ target rule, the ACL body-versus-status distinction, the
+unknown-SNI fallback, and the limits of what the round proves.
+
+**What this does not establish.** The round is a measurement, not an
+acceptance: the test stack used a self-signed certificate, a non-443 port, and
+a test SNI, so it says nothing about production cover story. No raw capture was
+retained — the report is the record, and section 7 of it says so explicitly.
+Nothing in `tests/` replays the round yet; the requirement set `E2E-01` through
+`E2E-04` in `.planning/REQUIREMENTS.md` is the work that turns it into a guard.
+Do not cite the report as evidence that the repository's REALITY leg is
+regression-tested.
 
 ## What the Windows authoring host cannot do
 

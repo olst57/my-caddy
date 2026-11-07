@@ -4,42 +4,48 @@
 **Core Value:** Three roles coexist on one binary, one Caddyfile, and one
 `:443` without interference, and that claim is reproducible from evidence.
 
-## v0.4.3 Requirements
+## v0.5.0 Requirements
 
-Requirements for the first GSD-managed milestone. Each maps to exactly one
-roadmap phase.
+Requirements for milestone `v0.5.0`. Each maps to exactly one roadmap phase.
+The milestone exists because a REALITY round was measured by hand and produced
+no executable guard; these requirements convert that measurement into tests.
 
-### Verification
+### REALITY end-to-end
 
-- [ ] **VER-01**: `scripts/verify.sh` declares `EXPECTED_ITEMS=26` and emits
-  exactly the 26 IDs in its explicit item set, once each, with no silent skip.
-- [ ] **VER-02**: `S3-12` proves the `protocols h1 h2` pin at declaration level
-  and in the adapted JSON, and fails when the line is removed.
-- [ ] **VER-03**: `S3-13` proves the adapted `forward_proxy` keeps both
-  `auth_credentials` and `probe_resistance`, and fails when either is removed.
-- [ ] **VER-04**: `tests/coexist/run.sh` prints `COEXIST: PASS` with CO-1
-  through CO-7 on a Linux host with root.
-- [ ] **VER-05**: `.github/workflows/verify.yml` runs the offline and
-  coexistence suites on push and pull request, and either failure is red.
-- [ ] **VER-06**: `docs/VERIFY.md` and `docs/BUILD.md` describe the same item
-  set the scripts execute, without claiming an unrun result.
+- [ ] **E2E-01**: `tests/e2e/` starts a real Xray server behind layer4 and a
+  second Xray client that reaches it through the Caddy `:443` listener, opens a
+  VLESS/Vision tunnel, and gets the expected inner HTTP response with no
+  `alert 40`. Key material is generated at run time or injected from the
+  environment; a missing value fails the run instead of skipping it.
+- [ ] **E2E-02**: An unauthenticated probe receives the outer certificate of
+  the configured real destination — same SAN, issuer, validity window, and
+  fingerprint — over TLS 1.3 with ALPN `h2`, not the site certificate.
+- [ ] **E2E-03**: The layer4 upstream receives a well-formed PROXY v2 header:
+  28-byte preamble, `0d0a0d0a` signature, version/command `0x21`, family
+  `0x11`, and the expected upstream address.
+- [ ] **E2E-04**: A wrong UUID, a wrong publicKey, and a wrong shortId each
+  fail to open a tunnel, and the failure is asserted rather than tolerated.
 
-### Runtime acceptance
+### naive, ACL, and fixture guards
 
-- [ ] **RTA-01**: The REALITY default posture is decided: either the shipped
-  placeholder pair is runnable, or the docs and checks require replacing
-  `serverNames` and `dest` together before use.
-- [ ] **RTA-02**: The `probe_resistance` target cannot silently equal the
-  destination being proxied; the rule is documented and checked.
-- [ ] **RTA-03**: Every `v0.4.0` runtime-acceptance FAIL has a disposition —
-  fixed, documented as a limitation, or explicitly deferred.
+- [ ] **E2E-05**: A missing or wrong naive credential reaches the decoy with no
+  target data, and a private target is asserted as "no upstream bytes plus a
+  403 ACL log entry" — never on the status code alone.
+- [ ] **E2E-06**: Any non-443 fixture address is written `:port, host:port`
+  with an explicit `protocols h1 h2`, and a fixture that violates either rule
+  fails before the test runs.
+- [ ] **E2E-07**: The unknown-SNI and no-SNI fallback posture is decided
+  (reject, decoy, or default certificate) and asserted.
 
-### Release
+### Stability and evidence
 
-- [ ] **REL-01**: The verification slice is committed on a reviewable branch
-  and merged to `main` without rewriting published history.
-- [ ] **REL-02**: `v0.4.3` is tagged only after both suites are green, and its
-  artifacts, `SHA256SUMS`, `pins.txt`, and redacted evidence match the tag.
+- [ ] **E2E-08**: The harness completes 30 serial and 8 concurrent requests
+  through the same listener with zero errors.
+- [ ] **EVID-01**: Raw logs from the harness run are captured, scrubbed with
+  `scripts/redact-evidence.sh`, archived under `evidence/v0.5.0/`, and linked
+  from `evidence/README.md`; no real key, UUID, host, or address is tracked.
+- [ ] **REL-01**: A `v0.5.0` tag and release happen only after both suites are
+  green on the tagged commit and the owner approves publication.
 
 ## Validated Requirements
 
@@ -84,6 +90,10 @@ evidence. They are locked unless a later phase explicitly reopens them.
   local TLS termination — existing, Sprint 5.
 - [x] **REALITY-02**: PROXY v2 works only when both sides enable it — existing,
   Gate 0.
+- [x] **REALITY-03**: A REALITY client completes a VLESS/Vision tunnel through
+  `:443` against a real destination, and wrong UUID / publicKey / shortId fail
+  — measured 2026-11-06 on an isolated test stack
+  (`docs/E2E-NAIVE-REALITY-2026-11-06.md`); not yet automated.
 
 ### Hygiene
 
@@ -102,6 +112,10 @@ evidence. They are locked unless a later phase explicitly reopens them.
 | arm64 runtime execution | Artifact verification only; no arm64 run is claimed. |
 | Docker or a packaged distribution | Outside the v4 delivery shape. |
 | BBR, upstream cascades | Explicitly excluded by the v4 spec red lines. |
+| HTTP/3 on production `:443` | A separate change with its own risk; the test stack must not enable it silently. |
+| Long-soak, DPI, and active-probing campaigns | Out of the milestone budget; the harness covers a smoke level only. |
+| Real domains, real credentials, real key material in the tree | The repository stays placeholder-only; runtime generation or environment injection. |
+| arm64 execution of `v0.5.0` | Artifact verification only, unless a run is explicitly scheduled. |
 | Public-internet H3 measurement | HTTP/3 is off; measuring it would test nothing shipped. |
 | Licence/SPDX conclusions | Not evidenced in this repository. |
 
@@ -109,24 +123,23 @@ evidence. They are locked unless a later phase explicitly reopens them.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| VER-01 | Phase 1 | Pending |
-| VER-02 | Phase 1 | Pending |
-| VER-03 | Phase 1 | Pending |
-| VER-04 | Phase 1 | Pending |
-| VER-05 | Phase 1 | Pending |
-| VER-06 | Phase 1 | Pending |
-| RTA-01 | Phase 2 | Pending |
-| RTA-02 | Phase 2 | Pending |
-| RTA-03 | Phase 2 | Pending |
-| REL-01 | Phase 3 | Pending |
-| REL-02 | Phase 3 | Pending |
+| E2E-01 | Phase 4 | Pending |
+| E2E-02 | Phase 4 | Pending |
+| E2E-03 | Phase 4 | Pending |
+| E2E-04 | Phase 4 | Pending |
+| E2E-05 | Phase 5 | Pending |
+| E2E-06 | Phase 5 | Pending |
+| E2E-07 | Phase 5 | Pending |
+| E2E-08 | Phase 6 | Pending |
+| EVID-01 | Phase 6 | Pending |
+| REL-01 | Phase 6 | Pending |
 
 **Coverage:**
 
-- v0.4.3 requirements: 11 total
-- Mapped to phases: 11
+- v0.5.0 requirements: 10 total
+- Mapped to phases: 10
 - Unmapped: 0
 
 ---
-*Requirements defined: 2026-11-05*
-*Last updated: 2026-11-05 after initialization*
+*Requirements defined: 2026-11-07*
+*Last updated: 2026-11-07 for milestone v0.5.0*
