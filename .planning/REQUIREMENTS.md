@@ -12,18 +12,18 @@ no executable guard; these requirements convert that measurement into tests.
 
 ### REALITY end-to-end
 
-- [ ] **E2E-01**: `tests/e2e/` starts a real Xray server behind layer4 and a
+- [x] **E2E-01**: `tests/e2e/` starts a real Xray server behind layer4 and a
   second Xray client that reaches it through the Caddy `:443` listener, opens a
   VLESS/Vision tunnel, and gets the expected inner HTTP response with no
   `alert 40`. Key material is generated at run time or injected from the
   environment; a missing value fails the run instead of skipping it.
-- [ ] **E2E-02**: An unauthenticated probe receives the outer certificate of
+- [x] **E2E-02**: An unauthenticated probe receives the outer certificate of
   the configured real destination — same SAN, issuer, validity window, and
   fingerprint — over TLS 1.3 with ALPN `h2`, not the site certificate.
-- [ ] **E2E-03**: The layer4 upstream receives a well-formed PROXY v2 header:
+- [x] **E2E-03**: The layer4 upstream receives a well-formed PROXY v2 header:
   28-byte preamble, `0d0a0d0a` signature, version/command `0x21`, family
   `0x11`, and the expected upstream address.
-- [ ] **E2E-04**: A wrong UUID, a wrong publicKey, and a wrong shortId each
+- [x] **E2E-04**: A wrong UUID, a wrong publicKey, and a wrong shortId each
   fail to open a tunnel, and the failure is asserted rather than tolerated.
 
 ### naive, ACL, and fixture guards
@@ -123,10 +123,10 @@ evidence. They are locked unless a later phase explicitly reopens them.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| E2E-01 | Phase 4 | Pending |
-| E2E-02 | Phase 4 | Pending |
-| E2E-03 | Phase 4 | Pending |
-| E2E-04 | Phase 4 | Pending |
+| E2E-01 | Phase 4 | Complete |
+| E2E-02 | Phase 4 | Complete |
+| E2E-03 | Phase 4 | Complete |
+| E2E-04 | Phase 4 | Complete |
 | E2E-05 | Phase 5 | Pending |
 | E2E-06 | Phase 5 | Pending |
 | E2E-07 | Phase 5 | Pending |
