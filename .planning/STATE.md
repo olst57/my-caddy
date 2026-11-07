@@ -2,19 +2,19 @@
 gsd_state_version: "1.0"
 milestone: v0.5.0
 milestone_name: REALITY closure and E2E regression harness
-current_phase: 05
-current_phase_name: naive/ACL assertions and fixture guards
+current_phase: 06
+current_phase_name: Stability smoke, evidence, and release decision
 status: executing
-stopped_at: Phase 5 plans 01-02 verified; E2E-07 baseline recorded; awaiting posture decision.
-last_updated: "2026-11-07T06:30:35.860Z"
+stopped_at: Phase 5 complete; E2E-07 posture fixed to reject; CI green on ae5a6f8; Phase 6 starting.
+last_updated: "2026-11-07T00:00:00.000Z"
 last_activity: 2026-11-07
-last_activity_desc: Phase 5 plans 01-02 verified; E2E-07 baseline recorded; CI fbc1a2f green; awaiting posture decision
-state_head: 9e46d0cb11d946bd77e1ceab8d9a765eff09bbf2
+last_activity_desc: Phase 5 closed with E2E-07 posture reject; CI green on ae5a6f8; Phase 6 starting
+state_head: ae5a6f8c1fbf0a505b2483d461d3d2a7962c12d8
 progress:
   total_phases: 3
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 9
-  completed_plans: 5
+  completed_plans: 6
 ---
 
 # Project State
@@ -32,15 +32,15 @@ read-only inputs.
 
 ## Current Position
 
-Phase: 05 — naive/ACL assertions and fixture guards
-Plan: 05-03 — Decide and assert the unknown-SNI posture
-Status: In progress — blocking E2E-07 checkpoint
-Last activity: 2026-11-07 — Plan 05-01/05-02 verified; baseline recorded
+Phase: 06 — Stability smoke, evidence, and release decision
+Plan: 06-01 — Serial and concurrent smoke (E2E-08)
+Status: In progress — Phase 5 is closed and Phase 6 has started
+Last activity: 2026-11-07 — E2E-07 asserted with the `reject` posture
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed in `v0.5.0`: 5
+- Total plans completed in `v0.5.0`: 6
 - `v0.4.3` baseline: 8 plans, ~22 min average, ~3 h total
 
 **By Phase (`v0.5.0`):**
@@ -48,16 +48,15 @@ Last activity: 2026-11-07 — Plan 05-01/05-02 verified; baseline recorded
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 4. REALITY E2E harness | 3 | 3 | — |
-| 5. naive/ACL assertions and fixture guards | 2 | 3 | — |
+| 5. naive/ACL assertions and fixture guards | 3 | 3 | — |
 | 6. Stability smoke, evidence, release decision | 0 | 3 | — |
 
 **Recent Trend:**
-- Phase 5 has 2/3 plans complete. The final E2E run is 9/9 with both positive
-  controls, the offline suite is 26/26, and coexistence is 8/8. The remaining
-  plan is the blocking E2E-07 posture decision. CI `gate0` and `verify` are
-  green on `fbc1a2f`:
-  <https://github.com/olst57/my-caddy/actions/runs/42347099461> and
-  <https://github.com/olst57/my-caddy/actions/runs/42347099453>.
+- Phase 5 is complete: the harness asserts ten items and prints
+  `E2E-07 POSTURE: reject`. The offline suite is 26/26 and coexistence is 8/8
+  on the same commit. CI `gate0` and `verify` are green on `ae5a6f8`:
+  <https://github.com/olst57/my-caddy/actions/runs/42365162459> and
+  <https://github.com/olst57/my-caddy/actions/runs/42365162477>.
 
 *Updated after each plan completion.*
 
@@ -98,20 +97,21 @@ affecting current work:
 - The frozen counts stay 26 offline and 8 coexistence. New guards are
   separate checks, not additional items, so `v0.4.3` evidence stays
   comparable.
-- The unknown-SNI/no-SNI posture is **undecided**. Phase 5 measured a
-  reject-like baseline on the current fixture and stops at a checkpoint until
-  the owner picks `reject`, `decoy`, or `default`.
+- The unknown-SNI/no-SNI posture is **`reject`** (decided 2026-11-07). The
+  delivery file already had no catch-all site and no `tls` fallback, so the
+  harness freezes measured behaviour instead of editing the frozen file. A
+  later move to `decoy` or `default` is an explicit `deploy/Caddyfile`
+  amendment paired with an S7-18 update.
 - [Phase 4]: The REALITY E2E harness is a separate fail-closed suite that derives its Caddyfile from deploy/Caddyfile and keeps the 26/8 frozen counts unchanged. — A green run must describe the delivery shape, not a hand-written fixture; the existing gates stay comparable.
 - [Phase 4]: Xray 26 needs a test-only finalRules loopback allow, and caddy-l4 writes the dialled destination into PROXY v2. — Both were measured on the Linux host; they make E2E-01 and E2E-03 deterministic without changing production configuration.
 - [Phase 4]: Negative controls get a 90-second budget and are classified against both client and server logs. — A wrong UUID can be rejected only after the client's REALITY retry loop exceeds the ordinary 25-second request budget.
 - [Phase 5]: The unknown/empty/absent SNI baseline is measured, not asserted. — The owner has not chosen reject, decoy, or default; encoding a posture before the answer would make the suite defend an unchosen behaviour.
 - [Phase 5]: `socks_get` clears its per-attempt body, header, output and error files before each request. — An earlier closing-control run left a stale marker behind and could have made an empty reply look successful.
-- [Phase 5]: CI is green on the recorded commit `fbc1a2f`; the exact commit also re-ran 26/26 offline and 8/8 coexistence on `hw-gz`. — The CI status is evidence for the pushed tree, not a substitute for the Linux runtime checks.
+- [Phase 5]: The unknown/empty/absent SNI baseline is **asserted**, not printed. — The posture decision is now `reject`, so a listener that starts presenting a certificate for an unmatched name turns E2E-07 red.
+- [Phase 5]: CI is green on the recorded commit `ae5a6f8`; the exact commit also re-ran 26/26 offline, 8/8 coexistence, and 10/10 E2E on `hw-gz`. — The CI status is evidence for the pushed tree, not a substitute for the Linux runtime checks.
 
 ### Pending Todos
 
-- Decide the E2E-07 posture (`reject`, `decoy`, or `default`) before running
-  the assertion half of 05-03.
 - Execute Phase 6 after Phase 5 closes, with the Caddy and Xray binaries
   uploaded from the local machine rather than downloaded there.
 - Phase 6 publication waits on explicit owner approval.
@@ -124,9 +124,6 @@ affecting current work:
 - The REALITY harness needs a destination whose certificate covers the chosen
   SNI. A mismatched pair reproduces `alert 40`, so the destination is an
   external input, not a fixture.
-- E2E-07 is a blocking owner decision. The measured baseline is reject-like
-  for unknown/absent SNI, but the delivery file does not yet state that
-  posture explicitly; the plan must not encode one before the answer.
 - arm64 execution of `v0.5.0` is out of scope unless scheduled; the existing
   arm64 claim belongs to `v0.4.3`.
 
@@ -149,8 +146,8 @@ affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-11-07T06:30:35.860Z
-Stopped at: Phase 5 plans 01-02 complete; E2E-07 baseline recorded; awaiting the
-owner's posture decision.
-Resume file: .planning/phases/05-naive-acl-assertions-and-fixture-guards/05-03-PLAN.md
-Baseline: .planning/phases/05-naive-acl-assertions-and-fixture-guards/05-03-BASELINE.md
+Last session: 2026-11-07T00:00:00.000Z
+Stopped at: Phase 5 complete — E2E-07 asserted with the `reject` posture and CI
+green on `ae5a6f8`. Phase 6 has started.
+Resume file: .planning/phases/06-stability-smoke-evidence-and-release-decision/06-01-PLAN.md
+Previous: .planning/phases/05-naive-acl-assertions-and-fixture-guards/05-03-SUMMARY.md

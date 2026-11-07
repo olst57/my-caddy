@@ -20,6 +20,8 @@
 #     E2E-05b a missing naive credential reaches the decoy, not the target
 #     E2E-05c a correct credential cannot reach a private target (ACL + zero bytes)
 #     E2E-07    an unmatched or absent SNI is rejected, not handed a certificate
+#     E2E-08    30 serial and 8 concurrent requests through each leg, with the
+#               upstream count corroborating the client count
 #
 #   Every negative control mutates exactly one line of the passing client
 #   config; the render step refuses to emit a control whose diff is not
@@ -91,6 +93,17 @@ SOCKS_PORT=10802
 NAIVE_TARGET_MARKER="E2E-NAIVE-TARGET-MARKER"
 TARGET_COUNT="$WORKDIR/target-count.jsonl"
 
+# The naive smoke needs a target the delivery ACL allows. The built-in deny
+# list is 10/8, 127/8, 172.16/12, ::1/128 and fe80::/10 (read from the pinned
+# forwardproxy source), so a TEST-NET-3 address is allowed and still local
+# once it is bound to `lo`. That keeps the counting target real without adding
+# an `acl` directive to the config under test -- E2E-05c still exercises the
+# unmodified deny list.
+SMOKE_TARGET_IP="${E2E_SMOKE_TARGET_IP:-203.0.113.10}"
+SMOKE_TARGET_PORT="${E2E_SMOKE_TARGET_PORT:-18082}"
+SMOKE_TARGET_COUNT="$WORKDIR/smoke-target-count.jsonl"
+SMOKE_IP_ADDED=0
+
 REQUIRED_VARS=(
 	CADDY_BIN
 	E2E_XRAY_SERVER_BIN
@@ -115,9 +128,13 @@ CADDY_PID=""
 BACKEND_PID=""
 STUB_PID=""
 TARGET_PID=""
+SMOKE_TARGET_PID=""
 
 cleanup_all() {
-	cleanup "$CLIENT_PID" "$SERVER_PID" "$CADDY_PID" "$BACKEND_PID" "$STUB_PID" "$TARGET_PID"
+	cleanup "$CLIENT_PID" "$SERVER_PID" "$CADDY_PID" "$BACKEND_PID" "$STUB_PID" "$TARGET_PID" "$SMOKE_TARGET_PID"
+	if [ "$SMOKE_IP_ADDED" -eq 1 ]; then
+		ip addr del "$SMOKE_TARGET_IP/32" dev lo 2>/dev/null
+	fi
 }
 trap cleanup_all EXIT
 
@@ -334,7 +351,7 @@ preflight() {
 	[ -x "$XRAY_SERVER" ] || fatal "no executable Xray server at $XRAY_SERVER"
 	[ -x "$XRAY_CLIENT" ] || fatal "no executable Xray client at $XRAY_CLIENT"
 	[ -f "$REPO_ROOT/deploy/Caddyfile" ] || fatal "deploy/Caddyfile missing"
-	for port in "$REALITY_PORT" "$SERVER_PORT" "$BACKEND_PORT" "$TARGET_PORT" "$SOCKS_PORT"; do
+	for port in "$REALITY_PORT" "$SERVER_PORT" "$BACKEND_PORT" "$TARGET_PORT" "$SMOKE_TARGET_PORT" "$SOCKS_PORT"; do
 		if port_busy "$port"; then
 			fatal "port $port is already in use; this harness needs it free"
 		fi
@@ -502,17 +519,31 @@ TARGET_PORT="$TARGET_PORT" TARGET_COUNT_FILE="$TARGET_COUNT" \
 	>"$WORKDIR/target.log" 2>&1 </dev/null &
 TARGET_PID=$!
 
+if ! ip -o -4 addr show dev lo 2>/dev/null | grep -q " $SMOKE_TARGET_IP/"; then
+	ip addr add "$SMOKE_TARGET_IP/32" dev lo 2>"$WORKDIR/smoke-ip.err" || {
+		cat "$WORKDIR/smoke-ip.err" >&2
+		fatal "could not add $SMOKE_TARGET_IP to lo for the naive smoke target"
+	}
+	SMOKE_IP_ADDED=1
+fi
+TARGET_BIND="$SMOKE_TARGET_IP" TARGET_PORT="$SMOKE_TARGET_PORT" \
+	TARGET_COUNT_FILE="$SMOKE_TARGET_COUNT" \
+	setsid python3 "$HERE/backend-counting.py" \
+	>"$WORKDIR/smoke-target.log" 2>&1 </dev/null &
+SMOKE_TARGET_PID=$!
+
 XDG_DATA_HOME="$WORKDIR/data" setsid "$CADDY_BIN" run \
 	--config "$WORKDIR/Caddyfile" --adapter caddyfile \
 	>"$WORKDIR/caddy.log" 2>&1 </dev/null &
 CADDY_PID=$!
 
-for port in "$REALITY_PORT" "$BACKEND_PORT" "$TARGET_PORT"; do
+for port in "$REALITY_PORT" "$BACKEND_PORT" "$TARGET_PORT" "$SMOKE_TARGET_PORT"; do
 	wait_port "$port" 30 || {
 		printf 'FATAL: nothing is listening on %s after 30s\n' "$port" >&2
 		tail -n 20 "$WORKDIR/caddy.log" >&2
 		tail -n 20 "$WORKDIR/backend.log" >&2
 		tail -n 20 "$WORKDIR/target.log" >&2
+		tail -n 20 "$WORKDIR/smoke-target.log" >&2
 		printf 'E2E: FAIL\n' >&2
 		exit 2
 	}
@@ -949,10 +980,76 @@ if [ "$closing_ok" -ne 1 ]; then
 	printf 'POSITIVE CONTROL CLOSING: FAIL\n'
 fi
 
+# --------------------------------------------------------------------- E2E-08
+# Stability is measured, not inferred from one lucky request. Thirty serial and
+# eight concurrent requests go through each leg; every request is a fresh
+# client unit and the smoke has no retry path. The client counts are
+# corroborated on the server side: the reality requests must appear in the site
+# backend's request log, and every naive request must be recorded by the
+# counting target it tunnels to. A client that bypassed the listener could not
+# move both counters.
+smoke_ok=1
+smoke_reality_expected=$((30 + 8))
+smoke_naive_expected=$((30 + 8))
+backend_inner_before="$(grep -c '^"GET /inner HTTP/1\.1" 200' "$WORKDIR/backend.log" 2>/dev/null || true)"
+backend_inner_before="${backend_inner_before:-0}"
+naive_total_before="$(records "$SMOKE_TARGET_COUNT")"
+
+smoke_run() { # $1=leg $2=mode $3=expected request count
+	local leg="$1" mode="$2" expected="$3" out rc line
+	out="$(E2E_SMOKE_CONNECT_PORT="$REALITY_PORT" \
+		E2E_SMOKE_SOCKS_PORT="$SOCKS_PORT" \
+		E2E_SMOKE_SNI="a.test" \
+		E2E_SMOKE_CA="$CA" \
+		E2E_SMOKE_USER="$USER_TOKEN" \
+		E2E_SMOKE_PASS="$PASS_TOKEN" \
+		E2E_SMOKE_NAIVE_TARGET="$SMOKE_TARGET_IP:$SMOKE_TARGET_PORT" \
+		E2E_SMOKE_WORKDIR="$WORKDIR/smoke-$leg-$mode" \
+		E2E_TARGET="$TARGET" \
+		E2E_TARGET_MARKER="$TARGET_MARKER" \
+		bash "$HERE/smoke.sh" "$leg" "$mode" 2>"$WORKDIR/smoke-$leg-$mode.err")"
+	rc=$?
+	line="$(printf '%s\n' "$out" | grep '^SMOKE ' | tail -n1)"
+	if [ -n "$line" ]; then printf '%s\n' "$line"; fi
+	if [ "$rc" -ne 0 ] ||
+		! printf '%s\n' "$line" | grep -q "count=$expected failures=0"; then
+		smoke_ok=0
+		printf '  smoke %s/%s rc=%s expected=%s\n' "$leg" "$mode" "$rc" "$expected" >&2
+		tail -n 10 "$WORKDIR/smoke-$leg-$mode.err" >&2 2>/dev/null
+	fi
+}
+
+smoke_run reality serial 30
+smoke_run reality concurrent 8
+smoke_run naive serial 30
+smoke_run naive concurrent 8
+
+backend_inner_after="$(grep -c '^"GET /inner HTTP/1\.1" 200' "$WORKDIR/backend.log" 2>/dev/null || true)"
+backend_inner_after="${backend_inner_after:-0}"
+naive_total_after="$(records "$SMOKE_TARGET_COUNT")"
+smoke_reality_delta=$((backend_inner_after - backend_inner_before))
+smoke_naive_delta=$((naive_total_after - naive_total_before))
+printf 'SMOKE UPSTREAM reality_requests=%s naive_records=%s\n' \
+	"$smoke_reality_delta" "$smoke_naive_delta"
+if [ "$smoke_reality_delta" -lt "$smoke_reality_expected" ]; then
+	smoke_ok=0
+	printf '  the site backend recorded %s of %s reality smoke requests\n' \
+		"$smoke_reality_delta" "$smoke_reality_expected" >&2
+fi
+if [ "$smoke_naive_delta" -lt "$smoke_naive_expected" ]; then
+	smoke_ok=0
+	printf '  the counting target recorded %s of %s naive smoke requests\n' \
+		"$smoke_naive_delta" "$smoke_naive_expected" >&2
+fi
+if [ "$smoke_ok" -eq 1 ]; then item E2E-08 PASS; else
+	item E2E-08 FAIL
+	tail -n 5 "$WORKDIR/caddy.log" >&2 2>/dev/null
+fi
+
 # ------------------------------------------------------------------- verdict
-# Ten items: E2E-01, 02, 03, 04a/b/c, 05a/b/c, 07. The count is pinned so a
+# Eleven items: E2E-01, 02, 03, 04a/b/c, 05a/b/c, 07, 08. The count is pinned so a
 # block that silently stops running cannot still print a green verdict.
-if [ "$FAILED" -eq 0 ] && [ "$PASSED" -eq 10 ] && [ "$closing_ok" -eq 1 ]; then
+if [ "$FAILED" -eq 0 ] && [ "$PASSED" -eq 11 ] && [ "$closing_ok" -eq 1 ]; then
 	printf 'E2E: PASS\n'
 	exit 0
 fi

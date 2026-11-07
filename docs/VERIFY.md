@@ -826,7 +826,7 @@ a **separate suite**: it does not add items to `scripts/verify.sh` (26 offline)
 or to `tests/coexist/` (CO-1..CO-8), so the frozen counts stay comparable with
 the `v0.4.3` evidence.
 
-It asserts ten things on one run:
+It asserts eleven things on one run:
 
 | Item | Subject |
 |---|---|
@@ -840,6 +840,7 @@ It asserts ten things on one run:
 | `E2E-05b` | the same three facts hold when no credential is sent |
 | `E2E-05c` | a correct credential cannot reach a private target: the counter stays unchanged and the Caddy log carries the `403 no allowed IP addresses` line |
 | `E2E-07` | an unmatched, empty, or absent SNI is rejected: no handshake, no certificate, and no layer4 record |
+| `E2E-08` | 30 serial and 8 concurrent requests through each leg finish with zero failures, and the upstream counters corroborate the client counts |
 
 **The unknown-SNI posture is `reject` (decided 2026-11-07).** The harness
 measures three cases against the site listener before the REALITY client
@@ -920,6 +921,29 @@ The opening and closing positive controls also retry transient SOCKS/Xray
 failures, up to three times, and print every failed attempt. `socks_get`
 removes its per-attempt body and header files first, so a stale marker cannot
 turn an empty reply into a pass.
+
+**The smoke does not retry.** `E2E-08` runs `smoke.sh` four times: REALITY
+serial (30), REALITY concurrent (8), naive serial (30), naive concurrent (8).
+Each request is a complete client unit — a fresh SOCKS fetch for the REALITY
+leg, a fresh TLS + `CONNECT` + `GET` for the naive leg — and a single failure
+makes the item red. Each run prints one line:
+
+```
+SMOKE leg=<leg> mode=<mode> count=<n> failures=<n> p50_ms=<n> p95_ms=<n> first_fail=<index|->
+```
+
+The client counts are corroborated on the server side: the site backend's
+request log must show at least 38 `GET /inner` lines for the REALITY legs, and
+the naive counting target must record at least 38 requests. A client that
+bypassed the listener could not move both counters. The naive smoke target is
+`203.0.113.10:18082` — a TEST-NET-3 address bound to `lo`, which the delivery
+ACL allows because its built-in deny list is only `10/8`, `127/8`,
+`172.16/12`, `::1/128` and `fe80::/10`. The address is removed at exit, and
+`E2E-05c` still exercises the unmodified private-network deny.
+
+The four runs take roughly 10–20 seconds on the test host. That is a bounded
+smoke, not a soak: it makes no claim about hours-long resource behaviour, and a
+request that exceeds its timeout is a failure rather than a slow success.
 
 **It fails closed.** Every required variable is checked before a process
 starts, and a missing or empty value exits `2` naming it. `--negative-preflight`

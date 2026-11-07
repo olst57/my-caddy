@@ -66,8 +66,9 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     port = int(os.environ.get("TARGET_PORT", "18081"))
+    bind = os.environ.get("TARGET_BIND", "127.0.0.1")
     count_file()
-    ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
+    ThreadingHTTPServer((bind, port), Handler).serve_forever()
 
 
 if __name__ == "__main__":

@@ -19,10 +19,11 @@ test config.
 | `19099/tcp` | REALITY inbound | Xray server, or the PROXY v2 stub |
 | `18080/tcp` | site reverse_proxy upstream and the tunnel's inner target | `site-backend.py` |
 | `18081/tcp` | counting target for the naive ACL and credential checks | `backend-counting.py` |
+| `18082/tcp` | counting target for the naive smoke, on `203.0.113.10` | `backend-counting.py` |
 | `10802/tcp` | SOCKS inbound of the Xray client | Xray client |
 
 `443` and `19098` are deliberately not touched: the harness refuses to start if
-`8443`, `19099`, `18080`, `18081` or `10802` is already in use.
+`8443`, `19099`, `18080`, `18081`, `18082` or `10802` is already in use.
 
 The harness needs **root**, because Caddy binds `8443` and its internal CA has
 to be created under the work directory.
@@ -116,8 +117,9 @@ before any process exists.
 | `E2E-05b` | The same three facts hold when no `Proxy-Authorization` is sent. |
 | `E2E-05c` | A correct credential cannot reach the private target: a GET sent inside the CONNECT stream produces no target marker and no counter change, and the scoped debug log carries `no allowed IP addresses` with status `403` in the item window. |
 | `E2E-07` | An unmatched, empty, or absent SNI is rejected: no handshake, no certificate field, and no new layer4 record. |
+| `E2E-08` | 30 serial and 8 concurrent requests through the REALITY leg, then the same through the naive leg, each with zero failures; the site log and the naive counting target must record at least the client count. |
 
-The run ends with `E2E: PASS` only when all ten items passed, and the closing
+The run ends with `E2E: PASS` only when all eleven items passed, and the closing
 positive control (the passing client, re-run after the three controls) still
 returns the marker.
 
@@ -144,11 +146,44 @@ refuses to build a zero-length `server_name` extension, so no record reaches
 the listener. The item asserts that limitation and says so in the output rather
 than claiming a server-side rejection it never observed.
 
+## The smoke (E2E-08)
+
+`smoke.sh <reality|naive> <serial|concurrent>` runs 30 serial or 8 concurrent
+complete client units and prints one line per run:
+
+```
+SMOKE leg=<leg> mode=<mode> count=<n> failures=<n> p50_ms=<n> p95_ms=<n> first_fail=<index|->
+```
+
+There is no retry path inside the smoke: one failed request makes the run exit
+non-zero, and the first failing index is printed with its reason. The REALITY
+leg is a fresh `curl` through the SOCKS inbound per request; the naive leg is a
+fresh TLS + `CONNECT` + `GET` per request.
+
+The naive smoke needs a destination the delivery ACL allows. The pinned
+forwardproxy denies `10/8`, `127/8`, `172.16/12`, `::1/128` and `fe80::/10`,
+so the harness binds a TEST-NET-3 address (`203.0.113.10`) to `lo`, runs a
+second counting target on `18082`, and asks the proxy for that address. This
+keeps the counting corroboration without adding an `acl` directive to the
+config under test, so `E2E-05c` still exercises the unmodified deny list. The
+address is removed by the exit trap.
+
+The four client counts are corroborated on the server side: the site backend's
+request log must show at least 38 `GET /inner` lines for the REALITY legs, and
+the naive counting target must append at least 38 records. A client that
+bypassed the listener cannot move those counters.
+
+The budget is about 10–20 seconds for all four runs on the test host. A run
+that exceeds the per-request timeout is a failure, not a slow success. This is
+a bounded smoke, not a soak: it says nothing about hours-long resource
+behaviour.
+
 ## What this does not prove
 
 - Production certificate chains, production decoy content and production
   hostnames: the run uses a self-signed internal CA and a throwaway SNI.
-- Long soaks, concurrency and resource exhaustion: that is `E2E-08`, Phase 6.
+- Long soaks and resource exhaustion: `E2E-08` is a bounded smoke (30 serial,
+  8 concurrent), not a soak.
 - DPI resistance, TLS-in-TLS fingerprints and traffic shaping.
 - That a valid empty-SNI ClientHello is rejected: the probe cannot construct
   one, so `E2E-07` covers the client's refusal, not the listener's handling of
@@ -158,12 +193,13 @@ than claiming a server-side rejection it never observed.
 
 | File | Role |
 |---|---|
-| `run.sh` | preflight, overlay derivation, stack, the ten items |
+| `run.sh` | preflight, overlay derivation, stack, the eleven items |
+| `smoke.sh` | serial and concurrent smoke for one leg, with counts and percentiles |
 | `lib.sh` | `item`, `stop_pid`, `cleanup`, `port_busy`, `wait_records`, `require_env` |
 | `negative-controls.sh` | renders the three single-field client mutations |
 | `site-backend.py` | the site upstream and the tunnel's inner target |
-| `backend-counting.py` | loopback target that appends one JSON line per accepted request |
-| `naive-tunnel.py` | raw CONNECT probe for the decoy, missing credential, and private-target ACL cases |
+| `backend-counting.py` | counting target that appends one JSON line per accepted request (bind address configurable) |
+| `naive-tunnel.py` | raw CONNECT probe for the decoy, missing credential, private-target ACL, and smoke cases |
 | `probe-sni.py` | unknown, empty, and absent SNI probe behind `E2E-07` |
 | `xray-server.tpl.json` | REALITY inbound template; no values |
 | `xray-client.tpl.json` | SOCKS + single VLESS outbound template; no values |

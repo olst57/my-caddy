@@ -44,7 +44,7 @@ def main():
     ap.add_argument("--auth", choices=("missing", "wrong", "correct"), required=True)
     ap.add_argument("--user")
     ap.add_argument("--password")
-    ap.add_argument("--expect", choices=("decoy", "not-target"), required=True)
+    ap.add_argument("--expect", choices=("decoy", "not-target", "target"), required=True)
     ap.add_argument("--timeout", type=float, default=25.0)
     args = ap.parse_args()
 
@@ -90,6 +90,15 @@ def main():
                 f"Host: {args.target}\r\n"
                 "Connection: close\r\n\r\n"
             ).encode()
+        elif args.expect == "target":
+            # The smoke leg needs the tunnel to carry a real request, so the
+            # success signal is the target's own marker rather than an empty
+            # CONNECT that a proxy could acknowledge without dialling.
+            request += (
+                "GET /smoke HTTP/1.1\r\n"
+                f"Host: {args.target}\r\n"
+                "Connection: close\r\n\r\n"
+            ).encode()
         tls.sendall(request)
         raw = read_until_quiet(tls, min(args.timeout, 5.0))
     except (OSError, ssl.SSLError) as exc:
@@ -107,6 +116,8 @@ def main():
     has_status = status.startswith("HTTP/")
     if args.expect == "decoy":
         ok = has_status and result["decoy_page"] and not result["target_marker"]
+    elif args.expect == "target":
+        ok = has_status and " 200 " in status and result["target_marker"] and not result["decoy_page"]
     else:
         ok = has_status and not result["target_marker"]
     print(json.dumps(result, indent=2, sort_keys=True))
