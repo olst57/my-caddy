@@ -34,8 +34,9 @@ no executable guard; these requirements convert that measurement into tests.
 - [x] **E2E-06**: Any non-443 fixture address is written `:port, host:port`
   with an explicit `protocols h1 h2`, and a fixture that violates either rule
   fails before the test runs.
-- [ ] **E2E-07**: The unknown-SNI and no-SNI fallback posture is decided
-  (reject, decoy, or default certificate) and asserted.
+- [x] **E2E-07**: The unknown-SNI and no-SNI fallback posture is decided
+  (`reject`, 2026-11-07) and asserted: no handshake, no certificate, and no
+  layer4 record for unknown, empty, or absent SNI.
 
 ### Stability and evidence
 
@@ -129,7 +130,7 @@ evidence. They are locked unless a later phase explicitly reopens them.
 | E2E-04 | Phase 4 | Complete |
 | E2E-05 | Phase 5 | Complete |
 | E2E-06 | Phase 5 | Complete |
-| E2E-07 | Phase 5 | Pending — baseline measured; posture decision required |
+| E2E-07 | Phase 5 | Complete — `reject`, asserted by the harness |
 | E2E-08 | Phase 6 | Pending |
 | EVID-01 | Phase 6 | Pending |
 | REL-01 | Phase 6 | Pending |

@@ -19,7 +19,7 @@
 #     E2E-05a a wrong naive credential reaches the decoy, not the target
 #     E2E-05b a missing naive credential reaches the decoy, not the target
 #     E2E-05c a correct credential cannot reach a private target (ACL + zero bytes)
-#     E2E-07    the unknown/empty/absent SNI baseline is recorded, not asserted
+#     E2E-07    an unmatched or absent SNI is rejected, not handed a certificate
 #
 #   Every negative control mutates exactly one line of the passing client
 #   config; the render step refuses to emit a control whose diff is not
@@ -137,6 +137,18 @@ import json, sys
 with open(sys.argv[1], encoding="utf-8") as fh:
     print(json.load(fh).get(sys.argv[2]))
 ' "$1" "$2"
+}
+
+# The SNI probe writes JSONL, one `E2E-07 BASELINE ` prefix per line, so the
+# single-document `json_field` above cannot read it. `$2` is 1-based.
+baseline_field() { # $1=jsonl file $2=line number $3=field
+	python3 -c '
+import json, sys
+lines = [l for l in open(sys.argv[1], encoding="utf-8").read().splitlines() if l.strip()]
+record = json.loads(lines[int(sys.argv[2]) - 1][lines[int(sys.argv[2]) - 1].index("{"):])
+value = record.get(sys.argv[3])
+print("" if value is None else value)
+' "$1" "$2" "$3"
 }
 
 # ------------------------------------------------------------------ preflight
@@ -573,10 +585,20 @@ if [ "$proxy_ok" -eq 1 ]; then item E2E-03 PASS; else
 	cat "$WORKDIR/proxyv2.jsonl" >&2 2>/dev/null
 fi
 
-# ------------------------------------------------------------------ E2E-07 baseline
-# The posture is undecided. Measure all three cases while the PROXY v2 stub is
-# still the layer4 upstream, so each record delta is observable. This block
-# prints facts and does not turn a posture into a pass/fail item yet.
+# ------------------------------------------------------------------------ E2E-07
+# Decision (2026-11-07): an unmatched or absent SNI is REJECTED. The handshake
+# fails, no certificate is presented, and the connection never reaches the
+# layer4 upstream. This is the posture the delivery file already has -- it
+# carries no catch-all site and no `tls` fallback for unmatched names -- so the
+# assertion below freezes measured behaviour rather than inventing it. A change
+# that starts handing out a certificate turns this item red.
+#
+# Measured while the PROXY v2 stub is still the layer4 upstream, so each record
+# delta is observable rather than inferred from the absence of a log line.
+#
+# The empty-SNI case is a documented client limitation: the probe's TLS client
+# refuses to build a zero-length server_name extension, so nothing leaves the
+# process. It is asserted as that limitation, never as a server-side verdict.
 python3 "$HERE/probe-sni.py" \
 	--connect-host 127.0.0.1 --connect-port "$REALITY_PORT" \
 	--count-file "$WORKDIR/proxyv2.jsonl" --timeout "$TIMEOUT" \
@@ -586,7 +608,47 @@ baseline_count="$(grep -c '^E2E-07 BASELINE ' "$WORKDIR/e2e07-baseline.jsonl" 2>
 [ "$baseline_count" -eq 3 ] ||
 	fatal "expected three E2E-07 baseline records, got ${baseline_count:-0}"
 cat "$WORKDIR/e2e07-baseline.jsonl"
-printf 'E2E-07 BASELINE: RECORDED\n'
+
+e2e07_ok=1
+sni_case_ok() { # $1=line $2=case name $3=expected error fragment
+	local handshake delta field
+	handshake="$(baseline_field "$WORKDIR/e2e07-baseline.jsonl" "$1" handshake)"
+	delta="$(baseline_field "$WORKDIR/e2e07-baseline.jsonl" "$1" layer4_records_delta)"
+	if [ "$handshake" != "False" ]; then
+		printf 'E2E-07 %s MISMATCH handshake=%s expected=False\n' "$2" "$handshake"
+		e2e07_ok=0
+	fi
+	if [ "$delta" != "0" ]; then
+		printf 'E2E-07 %s MISMATCH layer4_records_delta=%s expected=0\n' "$2" "$delta"
+		e2e07_ok=0
+	fi
+	# A rejected handshake presents no certificate at all. Any of these fields
+	# becoming non-empty means the listener started answering instead.
+	for field in subject san issuer sha256; do
+		if [ -n "$(baseline_field "$WORKDIR/e2e07-baseline.jsonl" "$1" "$field")" ]; then
+			printf 'E2E-07 %s MISMATCH %s is set; a rejected handshake presents no certificate\n' \
+				"$2" "$field"
+			e2e07_ok=0
+		fi
+	done
+	if ! baseline_field "$WORKDIR/e2e07-baseline.jsonl" "$1" error | grep -qi -- "$3"; then
+		printf 'E2E-07 %s MISMATCH error lacks %s: %s\n' "$2" "$3" \
+			"$(baseline_field "$WORKDIR/e2e07-baseline.jsonl" "$1" error)"
+		e2e07_ok=0
+	fi
+}
+
+sni_case_ok 1 unknown alert
+sni_case_ok 2 empty servername
+sni_case_ok 3 absent alert
+
+if [ "$e2e07_ok" -eq 1 ]; then
+	printf 'E2E-07 POSTURE: reject\n'
+	item E2E-07 PASS
+else
+	item E2E-07 FAIL
+	cat "$WORKDIR/e2e07-baseline.jsonl" >&2
+fi
 
 stop_pid "$STUB_PID"
 STUB_PID=""
@@ -888,7 +950,9 @@ if [ "$closing_ok" -ne 1 ]; then
 fi
 
 # ------------------------------------------------------------------- verdict
-if [ "$FAILED" -eq 0 ] && [ "$PASSED" -eq 9 ] && [ "$closing_ok" -eq 1 ]; then
+# Ten items: E2E-01, 02, 03, 04a/b/c, 05a/b/c, 07. The count is pinned so a
+# block that silently stops running cannot still print a green verdict.
+if [ "$FAILED" -eq 0 ] && [ "$PASSED" -eq 10 ] && [ "$closing_ok" -eq 1 ]; then
 	printf 'E2E: PASS\n'
 	exit 0
 fi

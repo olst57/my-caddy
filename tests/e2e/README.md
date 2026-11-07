@@ -115,8 +115,9 @@ before any process exists.
 | `E2E-05a` | A wrong naive credential for the test decoy name returns the hidden-page marker, never the target marker, and the counting target's byte count does not change. |
 | `E2E-05b` | The same three facts hold when no `Proxy-Authorization` is sent. |
 | `E2E-05c` | A correct credential cannot reach the private target: a GET sent inside the CONNECT stream produces no target marker and no counter change, and the scoped debug log carries `no allowed IP addresses` with status `403` in the item window. |
+| `E2E-07` | An unmatched, empty, or absent SNI is rejected: no handshake, no certificate field, and no new layer4 record. |
 
-The run ends with `E2E: PASS` only when all nine items passed, and the closing
+The run ends with `E2E: PASS` only when all ten items passed, and the closing
 positive control (the passing client, re-run after the three controls) still
 returns the marker.
 
@@ -124,17 +125,24 @@ The opening and closing positive controls retry transient SOCKS/Xray failures
 up to three times. A failed attempt is printed; a control that never returns
 the target marker remains a failure.
 
-Before the REALITY client starts, the harness also measures the
-unknown/empty/absent SNI baseline against the site listener and prints three
-`E2E-07 BASELINE` JSON objects. Each object records the handshake, certificate
-subject and SAN, issuer, sha256, and the layer4 record delta. This is a
-measurement only: the posture decision is a blocking owner checkpoint, so the
-baseline does not count as a tenth item and does not turn a case red.
-The current workspace cannot emit an empty SNI extension (the client refuses
-before connecting), so that case records a client-side measurement rather
-than a server certificate.
-On the present fixture the unknown and absent cases also fail the handshake;
-that reject-like result is a baseline, not a chosen posture.
+Before the REALITY client starts, the harness measures the
+unknown/empty/absent SNI cases against the site listener, prints the three
+`E2E-07 BASELINE` JSON objects, and then asserts them as `E2E-07`. Each record
+carries the handshake, certificate subject and SAN, issuer, sha256, and the
+layer4 record delta. All three must show `handshake=false`, a zero layer4
+delta, and no certificate field; an error fragment is required per case
+(`alert` for unknown and absent, `servername` for empty).
+
+**The posture is `reject` (decided 2026-11-07).** It is what the delivery file
+already does — no catch-all site, no `tls` fallback — so the item freezes
+measured behaviour instead of inventing it, and `deploy/Caddyfile` stays
+frozen. Choosing `decoy` or `default` later is a separate, explicitly approved
+change to that file plus the S7-18 amendment.
+
+The empty case is a documented **client** limitation: the probe's TLS client
+refuses to build a zero-length `server_name` extension, so no record reaches
+the listener. The item asserts that limitation and says so in the output rather
+than claiming a server-side rejection it never observed.
 
 ## What this does not prove
 
@@ -142,20 +150,21 @@ that reject-like result is a baseline, not a chosen posture.
   hostnames: the run uses a self-signed internal CA and a throwaway SNI.
 - Long soaks, concurrency and resource exhaustion: that is `E2E-08`, Phase 6.
 - DPI resistance, TLS-in-TLS fingerprints and traffic shaping.
-- The unknown-SNI and no-SNI posture: `E2E-07` is open by design and is decided
-  in Phase 5, not here.
+- That a valid empty-SNI ClientHello is rejected: the probe cannot construct
+  one, so `E2E-07` covers the client's refusal, not the listener's handling of
+  a hand-built extension.
 
 ## Files
 
 | File | Role |
 |---|---|
-| `run.sh` | preflight, overlay derivation, stack, the nine items |
+| `run.sh` | preflight, overlay derivation, stack, the ten items |
 | `lib.sh` | `item`, `stop_pid`, `cleanup`, `port_busy`, `wait_records`, `require_env` |
 | `negative-controls.sh` | renders the three single-field client mutations |
 | `site-backend.py` | the site upstream and the tunnel's inner target |
 | `backend-counting.py` | loopback target that appends one JSON line per accepted request |
 | `naive-tunnel.py` | raw CONNECT probe for the decoy, missing credential, and private-target ACL cases |
-| `probe-sni.py` | unknown, empty, and absent SNI baseline probe |
+| `probe-sni.py` | unknown, empty, and absent SNI probe behind `E2E-07` |
 | `xray-server.tpl.json` | REALITY inbound template; no values |
 | `xray-client.tpl.json` | SOCKS + single VLESS outbound template; no values |
 | `probe-cert.py` | fetches and compares the presented certificate |

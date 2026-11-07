@@ -37,9 +37,9 @@ so `v0.5.0` starts at Phase 4.
 - [x] **Phase 4: REALITY E2E harness** (completed 2026-11-07) — Build `tests/e2e/` so a REALITY
   handshake, the masquerade certificate, PROXY v2, and the three negative
   controls run as assertions on `hw-gz`.
-- [ ] **Phase 5: naive/ACL assertions and fixture guards** — Upgrade the naive
-  negative controls to body-and-log assertions, make the non-443 fixture shape
-  machine-checked, and settle the unknown-SNI posture.
+- [x] **Phase 5: naive/ACL assertions and fixture guards** (completed 2026-11-07)
+  — Upgrade the naive negative controls to body-and-log assertions, make the
+  non-443 fixture shape machine-checked, and settle the unknown-SNI posture.
 - [ ] **Phase 6: Stability smoke, evidence, and release decision** — Run the
   serial/concurrent smoke, capture and redact evidence, and decide whether to
   publish `v0.5.0`.
@@ -91,12 +91,12 @@ make the fixture rules that cost time (F-01, F-02, F-03) machine-checked.
      `protocols h1 h2` fails the same way.
   4. The unknown-SNI and no-SNI posture is recorded as a decision and asserted
      by the suite.
-**Plans**: 2/3 plans complete
+**Plans**: 3/3 plans complete
 
 Plans:
 - [x] 05-01: Upgrade the naive and private-target assertions
 - [x] 05-02: Add the fixture address and protocol guards
-- [ ] 05-03: Decide and assert the unknown-SNI posture (baseline measured; awaiting owner decision)
+- [x] 05-03: Decide and assert the unknown-SNI posture (decided `reject`)
 
 ### Phase 6: Stability smoke, evidence, and release decision
 **Goal:** Show the harness is not a single lucky request, archive evidence that
@@ -129,24 +129,21 @@ Phases execute in numeric order: 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 4. REALITY E2E harness | 3/3 | Complete    | 2026-11-07 |
-| 5. naive/ACL assertions and fixture guards | 2/3 | In progress — E2E-07 checkpoint | - |
+| 5. naive/ACL assertions and fixture guards | 3/3 | Complete | 2026-11-07 |
 | 6. Stability smoke, evidence, and release decision | 0/3 | Not started | - |
 
-## Open Decision
+## Decision
 
-**E2E-07 — unknown, empty, and absent SNI (baseline measured 2026-11-07).** On
-the `hw-gz` test overlay, `unknown.test` and an absent SNI both failed the TLS
-handshake with an internal-error alert; the empty-SNI case was rejected by the
-client before a record was sent; all three produced a layer4 record delta of
-zero. The current delivery file has no catch-all site, so the earlier claim
-that an unmatched SNI receives the site certificate did not reproduce. This
-changes the current state from "default certificate" to effectively "reject".
-The posture is still undecided. The options are:
+**E2E-07 — unknown, empty, and absent SNI: `reject` (decided 2026-11-07).**
+On the `hw-gz` test overlay, `unknown.test` and an absent SNI both failed the
+TLS handshake with an internal-error alert; the empty-SNI case was rejected by
+the client before a record was sent; all three produced a layer4 record delta
+of zero and no certificate. The delivery file has no catch-all site and no
+`tls` fallback, so an SNI the layer4 route does not claim has nothing to
+terminate it. The earlier claim that an unmatched SNI receives the site
+certificate did not reproduce and is retracted.
 
-1. **reject** — keep the measured behaviour and make it explicit in the
-   delivery file and the harness.
-2. **decoy** — serve a dedicated decoy certificate and site for unmatched SNI.
-3. **default** — add a catch-all site and serve the default/site certificate.
-
-The Phase 5 baseline records the facts only. The plan stops at its blocking
-checkpoint; no posture or delivery change is encoded until the owner answers.
+The harness now asserts all three cases as `E2E-07`. `deploy/Caddyfile` was not
+edited: the decision freezes measured behaviour rather than changing delivery.
+`decoy` and `default` remain possible but each needs its own explicit approval
+and the matching S7-18 amendment.

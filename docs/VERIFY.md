@@ -826,7 +826,7 @@ a **separate suite**: it does not add items to `scripts/verify.sh` (26 offline)
 or to `tests/coexist/` (CO-1..CO-8), so the frozen counts stay comparable with
 the `v0.4.3` evidence.
 
-It asserts nine things on one run:
+It asserts ten things on one run:
 
 | Item | Subject |
 |---|---|
@@ -839,22 +839,33 @@ It asserts nine things on one run:
 | `E2E-05a` | a wrong naive credential returns the decoy body, never the target marker, and the target counter does not change |
 | `E2E-05b` | the same three facts hold when no credential is sent |
 | `E2E-05c` | a correct credential cannot reach a private target: the counter stays unchanged and the Caddy log carries the `403 no allowed IP addresses` line |
+| `E2E-07` | an unmatched, empty, or absent SNI is rejected: no handshake, no certificate, and no layer4 record |
 
-The harness also records an `E2E-07 BASELINE` line for unknown, empty and
-absent SNI before the REALITY client starts. Each line carries the handshake
-status, certificate subject/SAN/issuer/sha256, and the layer4 record delta.
-That output is deliberately a measurement, not an item: the owner has not yet
-chosen whether unmatched SNI should receive the default certificate, a
-dedicated decoy, or a rejected handshake.
-The empty-SNI case is client-limited: the probe records that its TLS client
-refused to construct that extension, so no handshake reached the listener.
+**The unknown-SNI posture is `reject` (decided 2026-11-07).** The harness
+measures three cases against the site listener before the REALITY client
+starts, and now asserts all three instead of only printing them. Each case must
+show `handshake=false`, `layer4_records_delta=0`, and no certificate field at
+all; a listener that starts answering with a certificate turns the item red.
 
-The measured baseline on the current fixture is reject-like: `unknown.test`
-and an absent SNI both failed the handshake, and all three cases left the
-layer4 record count unchanged. The delivery file has no catch-all site, so
-the earlier statement that an unmatched SNI would receive the site
-certificate did not reproduce. The posture is still an open owner decision;
-the baseline does not encode it.
+| Case | SNI sent | Asserted outcome |
+|---|---|---|
+| unknown | `unknown.test` | handshake fails with a TLS alert; no certificate; no layer4 record |
+| empty | zero-length attempt | the probe's TLS client refuses to build the extension, so nothing leaves the process |
+| absent | none | handshake fails with a TLS alert; no certificate; no layer4 record |
+
+The empty case is asserted as a **client limitation**, not as a server verdict:
+the probe cannot construct a zero-length `server_name` extension, so the
+listener is never reached. It is kept in the item because dropping it would
+make the coverage look wider than it is.
+
+This is the posture the delivery file already had. `deploy/Caddyfile` has no
+catch-all site and no `tls` fallback for unmatched names, so an SNI that the
+layer4 route does not claim has nothing to terminate it. The decision freezes
+measured behaviour; it does not edit the frozen delivery file. The earlier
+statement that an unmatched SNI would receive the site certificate did not
+reproduce and is retracted. Choosing `decoy` or `default` later is a separate,
+explicitly approved change to `deploy/Caddyfile` plus a matching update to
+`scripts/verify.sh` item S7-18, which is the only sanctioned amendment.
 
 The Caddyfile under test is **derived** from `deploy/Caddyfile` by literal
 substitution, then reversed and diffed against the delivery file; a non-empty
@@ -873,7 +884,7 @@ workflow header says so.
 
 **Recorded run.** On 2026-11-07 the harness ran on the Linux test host with
 key material generated at runtime and the Caddy and Xray binaries supplied from
-the local machine. It exited 0 with all nine items and both positive controls
+the local machine. It exited 0 with every item and both positive controls
 passing. The Caddy binary was the go1.26.9 build with sha256
 `872caeee23f804fcb2991e26f3c7fe9526eb8a1d5003d4dedcc280c95d762f1d`;
 the Xray binary reported version 26.10.29. Raw logs stayed in the ignored
