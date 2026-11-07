@@ -40,9 +40,10 @@ no executable guard; these requirements convert that measurement into tests.
 
 ### Stability and evidence
 
-- [ ] **E2E-08**: The harness completes 30 serial and 8 concurrent requests
-  through the same listener with zero errors.
-- [ ] **EVID-01**: Raw logs from the harness run are captured, scrubbed with
+- [x] **E2E-08**: The harness completes 30 serial and 8 concurrent requests
+  through the same listener with zero errors (30/30 and 8/8 on both legs,
+  upstream 38/38, 2026-11-07).
+- [x] **EVID-01**: Raw logs from the harness run are captured, scrubbed with
   `scripts/redact-evidence.sh`, archived under `evidence/v0.5.0/`, and linked
   from `evidence/README.md`; no real key, UUID, host, or address is tracked.
 - [ ] **REL-01**: A `v0.5.0` tag and release happen only after both suites are
@@ -131,9 +132,9 @@ evidence. They are locked unless a later phase explicitly reopens them.
 | E2E-05 | Phase 5 | Complete |
 | E2E-06 | Phase 5 | Complete |
 | E2E-07 | Phase 5 | Complete — `reject`, asserted by the harness |
-| E2E-08 | Phase 6 | Pending |
-| EVID-01 | Phase 6 | Pending |
-| REL-01 | Phase 6 | Pending |
+| E2E-08 | Phase 6 | Complete — 30/30 and 8/8 on both legs, upstream 38/38 |
+| EVID-01 | Phase 6 | Complete — `evidence/v0.5.0/`, five files, archive hash `35e1511a…` |
+| REL-01 | Phase 6 | Pending — blocking owner checkpoint |
 
 **Coverage:**
 
