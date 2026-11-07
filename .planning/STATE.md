@@ -6,10 +6,10 @@ current_phase: 06
 current_phase_name: Stability smoke, evidence, and release decision
 status: complete
 stopped_at: v0.5.0 published; upstream watcher added and dry-run verified.
-last_updated: "2026-11-07T13:20:00.000Z"
+last_updated: "2026-11-07T14:05:00.000Z"
 last_activity: 2026-11-07
-last_activity_desc: Added the daily upstream-drift watcher; dry run reports four components behind and opens nothing
-state_head: d79fca68b3ef4287ae41f06eff4adc35b60b8553
+last_activity_desc: Added the fork-sync workflow and fast-forwarded the caddy-l4 fork; the pin stays at 96e1a6bf
+state_head: 9b7313708b5e0815b44452eb75f68f9c25382c87
 progress:
   total_phases: 3
   completed_phases: 3
@@ -122,6 +122,7 @@ affecting current work:
 - [Phase 6]: Executing the 53 MB release asset on `hw-gz` is deferred, not claimed. — The release CDN measured 5–35 KB/s from the authoring machine and about 19 KB/s from the test host.
 - [Phase 6 follow-up]: Upstream drift is **reported**, never auto-applied. — A new Caddy tag can break the read-idle-timeout patch and both forks need syncing, so a bump stays a reviewed change; the daily watcher opens one issue and does not build.
 - [Phase 6 follow-up]: `forwardproxy` is watched on its `naive` branch, not `master`. — The pin is a `naive` commit; master stopped in 2024 and diverged by a README-only edit, so a master comparison reported a permanent false positive.
+- [Phase 6 follow-up]: Module forks are fast-forwarded daily, but only with an explicit `FORK_SYNC_TOKEN`; the pin never moves automatically. — `GITHUB_TOKEN` cannot write to another repository, and a synced fork head must not change today's binary.
 
 ### Pending Todos
 
@@ -145,6 +146,7 @@ affecting current work:
 
 | # | Description | Date | Commit | Status | Directory |
 |---|-------------|------|--------|--------|-----------|
+| 261107-fksync | Fast-forward the module forks without moving a pin | 2026-11-07 | 9b73137 | complete | [261107-fksync-sync-module-forks](./quick/261107-fksync-sync-module-forks/) |
 | 261107-uwu | Report when a pinned input falls behind upstream | 2026-11-07 | 2c894df | complete | [261107-uwu-report-upstream-drift](./quick/261107-uwu-report-upstream-drift/) |
 | 261106-wsw | Pin Go 1.26.9 to match the official naiveproxy Caddy build | 2026-11-07 | decb4cf | complete | [261106-wsw-pin-go-1-26-9-to-match-naiveproxy-offici](./quick/261106-wsw-pin-go-1-26-9-to-match-naiveproxy-offici/) |
 | 261106-tfx | Close the v0.4.3 follow-ups: pin fork SHAs, execute arm64, conclude licenses | 2026-11-06 | db05ba0 | complete | [261106-tfx-close-v0-4-3-follow-ups-pin-fork-shas-ex](./quick/261106-tfx-close-v0-4-3-follow-ups-pin-fork-shas-ex/) |
@@ -162,9 +164,9 @@ affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-11-07T13:20:00.000Z
-Stopped at: `v0.5.0` published and the milestone closed; a daily upstream watcher
-was added afterwards and its dry run reports four components behind without
-opening an issue.
+Last session: 2026-11-07T14:05:00.000Z
+Stopped at: `v0.5.0` published; upstream watcher and fork-sync both added. The
+caddy-l4 fork was fast-forwarded to `1da0f2bd…` while the build pin stays at
+`96e1a6bf…`, and CI `build` proved the pin still compiles.
 Resume file: .planning/phases/06-stability-smoke-evidence-and-release-decision/06-03-SUMMARY.md
 Previous: .planning/phases/06-stability-smoke-evidence-and-release-decision/06-02-SUMMARY.md
