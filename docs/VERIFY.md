@@ -818,3 +818,55 @@ work never attempted on any host, and the S3 items are not in that category.
 Caddy's internal CA leaves the certificate subject distinguished name empty, so
 `subject=` prints nothing useful; the hostname lives only in the SAN extension
 as `DNS:<name>`. Any certificate assertion must therefore read the SAN.
+
+## The REALITY end-to-end harness lives in `tests/e2e/`
+
+`tests/e2e/` is the executable version of the 2026-11-06 hand-run round. It is
+a **separate suite**: it does not add items to `scripts/verify.sh` (26 offline)
+or to `tests/coexist/` (CO-1..CO-8), so the frozen counts stay comparable with
+the `v0.4.3` evidence.
+
+It asserts six things on one run:
+
+| Item | Subject |
+|---|---|
+| `E2E-01` | a VLESS/Vision tunnel through the Caddy listener returns the inner target's body marker |
+| `E2E-02` | an unauthenticated probe is shown the destination's certificate, compared live field by field |
+| `E2E-03` | the layer4 upstream receives a PROXY v2 header whose fields parse as TCP/IPv4 |
+| `E2E-04a` | a wrong UUID opens no tunnel |
+| `E2E-04b` | a wrong publicKey opens no tunnel |
+| `E2E-04c` | a wrong shortId opens no tunnel |
+
+The Caddyfile under test is **derived** from `deploy/Caddyfile` by literal
+substitution, then reversed and diffed against the delivery file; a non-empty
+diff aborts before a listener starts. That is what keeps a green run a
+statement about the delivery shape rather than about a hand-written fixture.
+The derivation deliberately spells the non-443 site address as
+`:8443, a.test:8443` and keeps `protocols h1 h2`, so finding F-01 cannot recur
+silently.
+
+**Where it runs.** On the Linux test host, as root, with the Caddy binary and
+the two Xray binaries uploaded rather than downloaded. CI cannot run it: it
+needs root for `8443`, a real destination whose certificate covers the chosen
+SNI, and key material that must not live in the repository. CI only
+syntax-checks the scripts and byte-compiles the Python helpers, and the
+workflow header says so.
+
+**Recorded run.** On 2026-11-07 the harness ran on the Linux test host with
+key material generated at runtime and the Caddy and Xray binaries supplied from
+the local machine. It exited 0 with `E2E-01` through `E2E-04c` and both
+positive controls passing. The Caddy binary was the go1.26.9 build with sha256
+`872caeee23f804fcb2991e26f3c7fe9526eb8a1d5003d4dedcc280c95d762f1d`;
+the Xray binary reported version 26.10.29. Raw logs stayed in the ignored
+`.gate/v050/e2e-run5/` directory; Phase 6 is responsible for scrubbing and
+archiving them.
+
+**It fails closed.** Every required variable is checked before a process
+starts, and a missing or empty value exits `2` naming it. `--negative-preflight`
+proves that per variable, with no destination and no binary, by re-invoking the
+preflight with exactly one value removed or blanked. There is no skip outcome:
+a run that cannot obtain its inputs is a failure, not a pass.
+
+The input contract, the port plan (`8443`, `19099`, `18080`, `10802`) and the
+list of what the harness does **not** prove are in `tests/e2e/README.md`; this
+section intentionally does not duplicate the variable list.

@@ -11,3 +11,7 @@ dist/
 # Editor / OS noise
 .DS_Store
 Thumbs.db
+
+# Python byte-compiled helpers (tests/e2e/*.py are syntax-checked in CI)
+__pycache__/
+*.pyc

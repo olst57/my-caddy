@@ -19,6 +19,12 @@ name: verify
 # private-network deny in force, so a loopback target would be refused by the
 # ACL rather than tunneled. That external dependency is the only network input
 # in that job; everything else it talks to is 127.0.0.1.
+#
+# tests/e2e/ is SYNTAX-CHECKED here, never executed: it needs root for :8443, a
+# real destination whose certificate covers the chosen SNI, and key material
+# that must not be stored in the repository. Its fail-closed input handling is
+# still exercised, because `--negative-preflight` starts no process and needs
+# no destination or binary.
 
 on:
   workflow_dispatch:
@@ -50,12 +56,20 @@ jobs:
       - name: Install verifier dependencies
         run: |
           sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends jq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends jq shellcheck
           jq --version
+          shellcheck --version | head -n2
       - name: Build inputs are pinned
         run: bash tests/pins/check.sh
       - name: License record is complete
         run: bash tests/licenses/check.sh
+      - name: E2E harness is syntax-checked, not executed
+        run: |
+          set -euo pipefail
+          bash -n tests/e2e/*.sh
+          shellcheck -S warning tests/e2e/*.sh
+          python3 -m py_compile tests/e2e/*.py
+          bash tests/e2e/run.sh --negative-preflight
       - name: Build amd64 artifact
         run: bash scripts/build.sh --arch amd64
       - name: Offline verifier

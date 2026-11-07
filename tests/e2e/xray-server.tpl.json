@@ -1,0 +1,56 @@
+{
+  "log": {
+    "loglevel": "warning"
+  },
+  "inbounds": [
+    {
+      "listen": "127.0.0.1",
+      "port": 19099,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "id": "<E2E_REALITY_UUID>",
+            "flow": "xtls-rprx-vision"
+          }
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+          "serverNames": [
+            "<E2E_REALITY_SNI>"
+          ],
+          "privateKey": "<E2E_REALITY_PRIVATE_KEY>",
+          "shortIds": [
+            "<E2E_REALITY_SHORT_ID>"
+          ],
+          "dest": "<E2E_REALITY_DEST>",
+          "xver": 0
+        },
+        "sockopt": {
+          "acceptProxyProtocol": true
+        }
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "settings": {
+        "finalRules": [
+          {
+            "action": "allow",
+            "network": "tcp",
+            "ip": [
+              "127.0.0.1/8"
+            ],
+            "port": "18080"
+          }
+        ]
+      }
+    }
+  ]
+}
