@@ -32,24 +32,30 @@ components behind**
 
 ## First Live Report
 
-Manual `workflow_dispatch` with `dry_run=true`, run
-<https://github.com/olst57/my-caddy/actions/runs/42374657145>, commit
-`2c894df`: success, no issue created.
+Manual `workflow_dispatch` with `dry_run=true`, commit `2c894df`: success, no
+issue created. The first run printed `STALE components=4`, but one row was a
+false positive; the corrected report is below.
 
 | Component | Pinned | Upstream | State |
 |---|---|---|---|
 | `caddy_tag` | `v2.11.7` | `v2.11.9` | behind |
-| `forwardproxy_sha` | `e747854e…` | `80dde13c…` | behind |
+| `forwardproxy_sha` | `e747854e…` | `e747854e…` | in sync |
 | `caddy_l4_sha` | `96e1a6bf…` | `1da0f2bd…` | behind |
 | `xcaddy_version` | `v0.4.7` | `v0.4.7` | in sync |
 | `go_version` | `1.26.9` | `1.27.3` | behind |
 
-`UPSTREAM: STALE components=4`. The next scheduled run is what would open the
+`UPSTREAM: STALE components=3`. The next scheduled run is what would open the
 tracking issue; the dry run deliberately did not.
 
-The l4 row also shows the fork lag: upstream moved to `1da0f2bd…` while the
-`olst57` fork still sits at the pinned `96e1a6bf…`. A bump therefore needs a
-fork sync, not just a pins edit.
+The false positive was `forwardproxy`: it was queried on `master`, whose head
+is a 2024 README-only commit that diverged from the maintained line. The pin
+is a `naive` commit, and `klzgrad/forwardproxy` `naive` is still exactly
+`e747854e…`, so master would have reported a permanent false positive. The
+checker now reads `naive`, and `docs/BUILD.md` says why.
+
+The l4 row is real, and it also shows the fork lag: upstream moved to
+`1da0f2bd…` while the `olst57` fork still sits at the pinned `96e1a6bf…`. A
+bump therefore needs a fork sync, not just a pins edit.
 
 ## The YAML Bug the Dispatch Test Caught
 

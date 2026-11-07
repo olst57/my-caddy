@@ -76,7 +76,10 @@ else
 
 	caddy_tag="$(gh api repos/caddyserver/caddy/releases/latest --jq .tag_name)" \
 		|| die "caddy release lookup failed"
-	forwardproxy_sha="$(gh api repos/klzgrad/forwardproxy/commits/master --jq .sha)" \
+	# The maintained code is on `naive`, not `master`: master stopped in 2024
+	# and only diverged by a README edit. The pin is a `naive` commit, so
+	# comparing master would report a permanent false positive.
+	forwardproxy_sha="$(gh api repos/klzgrad/forwardproxy/commits/naive --jq .sha)" \
 		|| die "forwardproxy commit lookup failed"
 	caddy_l4_sha="$(gh api repos/mholt/caddy-l4/commits/master --jq .sha)" \
 		|| die "caddy-l4 commit lookup failed"

@@ -98,10 +98,14 @@ artifact is built and again in `build` after both architectures are built.
 ### Knowing when upstream moves
 
 `scripts/check-upstream.sh` compares every pin with its upstream: the Caddy and
-`xcaddy` release tags, the `forwardproxy` and `caddy-l4` default-branch heads,
-and the latest stable Go release. It only reports. It never edits
+`xcaddy` release tags, the `forwardproxy` `naive` head, the `caddy-l4` `master`
+head, and the latest stable Go release. It only reports. It never edits
 `pins/build-inputs.env`, because a bump has to prove that the read-idle-timeout
 patch still applies and that both forks were synced before their commits move.
+
+`forwardproxy` is compared on `naive`, not `master`: master stopped in 2024 and
+diverged from the maintained line by a README-only commit, so a master
+comparison would always report a false positive. The pin is a `naive` commit.
 
 The scheduled workflow `.github/workflows/upstream-watch.yml` runs it daily and
 opens one tracking issue when a pin is behind, commenting on that issue on later
