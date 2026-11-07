@@ -5,16 +5,16 @@ milestone_name: REALITY closure and E2E regression harness
 current_phase: 05
 current_phase_name: naive/ACL assertions and fixture guards
 status: executing
-stopped_at: Phase 4 complete; Phase 5 ready to execute.
-last_updated: "2026-11-07T04:14:41.104Z"
+stopped_at: Phase 5 plans 01-02 verified; E2E-07 baseline recorded; awaiting posture decision.
+last_updated: "2026-11-07T06:18:24.784Z"
 last_activity: 2026-11-07
-last_activity_desc: Phase 4 complete, transitioned to Phase 05
-state_head: 2fb3e9707eb507c27374f60daf7017d66950c9be
+last_activity_desc: Phase 5 plans 01-02 verified; E2E-07 baseline recorded; awaiting posture decision
+state_head: 9e46d0cb11d946bd77e1ceab8d9a765eff09bbf2
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 9
-  completed_plans: 3
+  completed_plans: 5
 ---
 
 # Project State
@@ -33,14 +33,14 @@ read-only inputs.
 ## Current Position
 
 Phase: 05 — naive/ACL assertions and fixture guards
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-11-07 — Phase 4 complete, transitioned to Phase 05
+Plan: 05-03 — Decide and assert the unknown-SNI posture
+Status: In progress — blocking E2E-07 checkpoint
+Last activity: 2026-11-07 — Plan 05-01/05-02 verified; baseline recorded
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed in `v0.5.0`: 3
+- Total plans completed in `v0.5.0`: 5
 - `v0.4.3` baseline: 8 plans, ~22 min average, ~3 h total
 
 **By Phase (`v0.5.0`):**
@@ -48,12 +48,13 @@ Last activity: 2026-11-07 — Phase 4 complete, transitioned to Phase 05
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 4. REALITY E2E harness | 3 | 3 | — |
-| 5. naive/ACL assertions and fixture guards | 0 | 3 | — |
+| 5. naive/ACL assertions and fixture guards | 2 | 3 | — |
 | 6. Stability smoke, evidence, release decision | 0 | 3 | — |
 
 **Recent Trend:**
-- Phase 4 completed 3/3 in one session; the offline and coexistence suites
-  remain 26/26 and 8/8, and both CI workflows are green.
+- Phase 5 has 2/3 plans complete. The final E2E run is 9/9 with both positive
+  controls, the offline suite is 26/26, and coexistence is 8/8. The remaining
+  plan is the blocking E2E-07 posture decision.
 
 *Updated after each plan completion.*
 
@@ -94,18 +95,21 @@ affecting current work:
 - The frozen counts stay 26 offline and 8 coexistence. New guards are
   separate checks, not additional items, so `v0.4.3` evidence stays
   comparable.
-- The unknown-SNI/no-SNI posture is **undecided**; Phase 5 measures the
-  baseline first and stops at a checkpoint until the owner picks one of
-  default certificate, dedicated decoy, or reject.
+- The unknown-SNI/no-SNI posture is **undecided**. Phase 5 measured a
+  reject-like baseline on the current fixture and stops at a checkpoint until
+  the owner picks `reject`, `decoy`, or `default`.
 - [Phase 4]: The REALITY E2E harness is a separate fail-closed suite that derives its Caddyfile from deploy/Caddyfile and keeps the 26/8 frozen counts unchanged. — A green run must describe the delivery shape, not a hand-written fixture; the existing gates stay comparable.
 - [Phase 4]: Xray 26 needs a test-only finalRules loopback allow, and caddy-l4 writes the dialled destination into PROXY v2. — Both were measured on the Linux host; they make E2E-01 and E2E-03 deterministic without changing production configuration.
 - [Phase 4]: Negative controls get a 90-second budget and are classified against both client and server logs. — A wrong UUID can be rejected only after the client's REALITY retry loop exceeds the ordinary 25-second request budget.
+- [Phase 5]: The unknown/empty/absent SNI baseline is measured, not asserted. — The owner has not chosen reject, decoy, or default; encoding a posture before the answer would make the suite defend an unchosen behaviour.
+- [Phase 5]: `socks_get` clears its per-attempt body, header, output and error files before each request. — An earlier closing-control run left a stale marker behind and could have made an empty reply look successful.
 
 ### Pending Todos
 
-- Execute Phase 5 (05-01 → 05-03) on the Linux host, with the Caddy and Xray
-  binaries uploaded from the local machine rather than downloaded there.
-- Phase 5 waits on the E2E-07 posture decision at its checkpoint.
+- Decide the E2E-07 posture (`reject`, `decoy`, or `default`) before running
+  the assertion half of 05-03.
+- Execute Phase 6 after Phase 5 closes, with the Caddy and Xray binaries
+  uploaded from the local machine rather than downloaded there.
 - Phase 6 publication waits on explicit owner approval.
 
 ### Blockers/Concerns
@@ -116,8 +120,9 @@ affecting current work:
 - The REALITY harness needs a destination whose certificate covers the chosen
   SNI. A mismatched pair reproduces `alert 40`, so the destination is an
   external input, not a fixture.
-- E2E-07 is open by design; the plan must not encode a posture the owner has
-  not chosen.
+- E2E-07 is a blocking owner decision. The measured baseline is reject-like
+  for unknown/absent SNI, but the delivery file does not yet state that
+  posture explicitly; the plan must not encode one before the answer.
 - arm64 execution of `v0.5.0` is out of scope unless scheduled; the existing
   arm64 claim belongs to `v0.4.3`.
 
@@ -140,6 +145,8 @@ affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-11-07T04:14:40.943Z
-Stopped at: Phase 4 complete; Phase 5 ready to execute.
-Resume file: .planning/phases/05-naive-acl-assertions-and-fixture-guards/05-01-PLAN.md
+Last session: 2026-11-07T06:18:24.784Z
+Stopped at: Phase 5 plans 01-02 complete; E2E-07 baseline recorded; awaiting the
+owner's posture decision.
+Resume file: .planning/phases/05-naive-acl-assertions-and-fixture-guards/05-03-PLAN.md
+Baseline: .planning/phases/05-naive-acl-assertions-and-fixture-guards/05-03-BASELINE.md

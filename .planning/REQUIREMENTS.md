@@ -28,10 +28,10 @@ no executable guard; these requirements convert that measurement into tests.
 
 ### naive, ACL, and fixture guards
 
-- [ ] **E2E-05**: A missing or wrong naive credential reaches the decoy with no
+- [x] **E2E-05**: A missing or wrong naive credential reaches the decoy with no
   target data, and a private target is asserted as "no upstream bytes plus a
   403 ACL log entry" — never on the status code alone.
-- [ ] **E2E-06**: Any non-443 fixture address is written `:port, host:port`
+- [x] **E2E-06**: Any non-443 fixture address is written `:port, host:port`
   with an explicit `protocols h1 h2`, and a fixture that violates either rule
   fails before the test runs.
 - [ ] **E2E-07**: The unknown-SNI and no-SNI fallback posture is decided
@@ -127,9 +127,9 @@ evidence. They are locked unless a later phase explicitly reopens them.
 | E2E-02 | Phase 4 | Complete |
 | E2E-03 | Phase 4 | Complete |
 | E2E-04 | Phase 4 | Complete |
-| E2E-05 | Phase 5 | Pending |
-| E2E-06 | Phase 5 | Pending |
-| E2E-07 | Phase 5 | Pending |
+| E2E-05 | Phase 5 | Complete |
+| E2E-06 | Phase 5 | Complete |
+| E2E-07 | Phase 5 | Pending — baseline measured; posture decision required |
 | E2E-08 | Phase 6 | Pending |
 | EVID-01 | Phase 6 | Pending |
 | REL-01 | Phase 6 | Pending |

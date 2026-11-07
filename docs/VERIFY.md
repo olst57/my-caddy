@@ -840,6 +840,22 @@ It asserts nine things on one run:
 | `E2E-05b` | the same three facts hold when no credential is sent |
 | `E2E-05c` | a correct credential cannot reach a private target: the counter stays unchanged and the Caddy log carries the `403 no allowed IP addresses` line |
 
+The harness also records an `E2E-07 BASELINE` line for unknown, empty and
+absent SNI before the REALITY client starts. Each line carries the handshake
+status, certificate subject/SAN/issuer/sha256, and the layer4 record delta.
+That output is deliberately a measurement, not an item: the owner has not yet
+chosen whether unmatched SNI should receive the default certificate, a
+dedicated decoy, or a rejected handshake.
+The empty-SNI case is client-limited: the probe records that its TLS client
+refused to construct that extension, so no handshake reached the listener.
+
+The measured baseline on the current fixture is reject-like: `unknown.test`
+and an absent SNI both failed the handshake, and all three cases left the
+layer4 record count unchanged. The delivery file has no catch-all site, so
+the earlier statement that an unmatched SNI would receive the site
+certificate did not reproduce. The posture is still an open owner decision;
+the baseline does not encode it.
+
 The Caddyfile under test is **derived** from `deploy/Caddyfile` by literal
 substitution, then reversed and diffed against the delivery file; a non-empty
 diff aborts before a listener starts. That is what keeps a green run a
@@ -889,6 +905,10 @@ The Xray readiness gate and the live-destination probes retry transient
 startup and network failures. A functional failure still ends red: `E2E-01`
 must satisfy every body, header and log condition on one attempt, and
 `E2E-02` must complete every certificate comparison after its retries.
+The opening and closing positive controls also retry transient SOCKS/Xray
+failures, up to three times, and print every failed attempt. `socks_get`
+removes its per-attempt body and header files first, so a stale marker cannot
+turn an empty reply into a pass.
 
 **It fails closed.** Every required variable is checked before a process
 starts, and a missing or empty value exits `2` naming it. `--negative-preflight`

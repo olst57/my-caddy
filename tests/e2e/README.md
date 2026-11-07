@@ -120,6 +120,22 @@ The run ends with `E2E: PASS` only when all nine items passed, and the closing
 positive control (the passing client, re-run after the three controls) still
 returns the marker.
 
+The opening and closing positive controls retry transient SOCKS/Xray failures
+up to three times. A failed attempt is printed; a control that never returns
+the target marker remains a failure.
+
+Before the REALITY client starts, the harness also measures the
+unknown/empty/absent SNI baseline against the site listener and prints three
+`E2E-07 BASELINE` JSON objects. Each object records the handshake, certificate
+subject and SAN, issuer, sha256, and the layer4 record delta. This is a
+measurement only: the posture decision is a blocking owner checkpoint, so the
+baseline does not count as a tenth item and does not turn a case red.
+The current workspace cannot emit an empty SNI extension (the client refuses
+before connecting), so that case records a client-side measurement rather
+than a server certificate.
+On the present fixture the unknown and absent cases also fail the handshake;
+that reject-like result is a baseline, not a chosen posture.
+
 ## What this does not prove
 
 - Production certificate chains, production decoy content and production
@@ -139,6 +155,7 @@ returns the marker.
 | `site-backend.py` | the site upstream and the tunnel's inner target |
 | `backend-counting.py` | loopback target that appends one JSON line per accepted request |
 | `naive-tunnel.py` | raw CONNECT probe for the decoy, missing credential, and private-target ACL cases |
+| `probe-sni.py` | unknown, empty, and absent SNI baseline probe |
 | `xray-server.tpl.json` | REALITY inbound template; no values |
 | `xray-client.tpl.json` | SOCKS + single VLESS outbound template; no values |
 | `probe-cert.py` | fetches and compares the presented certificate |
