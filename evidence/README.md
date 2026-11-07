@@ -184,3 +184,40 @@ ARM64 资产不再只是“结构校验”。手动工作流 `verify-arm64-relea
 - UUID 形状：无
 - URL userinfo 形态（`scheme://user:` 后跟非占位值再跟 `@`）：无
 - 主机形态 token：`docs/REDACTION.md` C2 允许的模块路径、内核版本串 `6.8.0-136-generic`、版本号 `v0.4.3`
+
+## v0.5.0 — REALITY 收口与 E2E/烟测证据（2026-11-07）
+
+- 输入：`.gate/v050/capture/`（只读，未改动）
+- 命令：`bash scripts/redact-evidence.sh .gate/v050/capture evidence/v0.5.0`
+  - stdout：`redact-evidence.sh: 5 file(s) redacted into evidence/v0.5.0`
+  - stderr：空；退出码：`0`
+- 文件数：**5** 个脱敏副本，另加 1 个手写的 `index.md`（`*.md` 按设计跳过，不由脚本产出）
+- 行数校验（副本 / 原件）：`caddy-sha256.txt` 2/2、`coexist-8.log` 10/10、`e2e-items.log` 20/20、`smoke-counts.log` 6/6、`verify-26.log` 29/29
+- 幂等：同一输入连跑两次到临时目录，`diff -r` 为空
+- 归档哈希（5 个脱敏文件，不含 `index.md`）：`sha256sum evidence/v0.5.0/{caddy-sha256,coexist-8,e2e-items,smoke-counts,verify-26}* | sha256sum` = `35e1511a2c571fdb550be2f5cc02fb0c3873db058c891aaa78476a5cf1ddaf0b`
+- 别名空间：本轮没有出现新的主机名或公网地址，`<HOST-1>`…`<HOST-8>` 与 `<PUBLIC_IP-1>`…`<PUBLIC_IP-6>` 均未新增
+
+| # | 文件 | 行数 | 用途 |
+|---|------|------|------|
+| 1 | `caddy-sha256.txt` | 2 | 本次运行所用二进制（go1.26.9 构建）的 sha256 |
+| 2 | `coexist-8.log` | 10 | `ITEM CO-1`…`ITEM CO-8` 与 `COEXIST: PASS` |
+| 3 | `e2e-items.log` | 20 | 11 条 `ITEM E2E-xx PASS`、三条 `E2E-07 BASELINE` 的 `reject` 观测、两项正对照与 `E2E: PASS` |
+| 4 | `smoke-counts.log` | 6 | 四条 `SMOKE` 计数行与上游佐证（`reality_requests=38`、`naive_records=38`） |
+| 5 | `verify-26.log` | 29 | 26 条 `ITEM` 加 `PASS=26 FAIL=0` 与 `VERIFY: PASS` |
+
+### 本轮的两处已知差异
+
+1. E2E 捕获是**逐行摘录**：保留每条 item、posture、control 与结论行，但去掉了详细的证书转储。完整日志留在 `.gate/`，因为它带着第三方站点的证书转录，那不是本仓库的证据。
+2. 本轮没有 `host.txt`：机器类别、端口与 commit 已写进每个文件首行的 `[capture]` 出处行，因此没有再单独采集一份主机清单。
+
+### 未归档的负向对照
+
+同一套件另跑了一次，把 naive 烟测的目标改成投递 ACL 拒绝的地址：其余十项保持绿色，只有 `E2E-08` 变红（`naive serial 30/30 failures`、`naive concurrent 8/8 failures`、`naive_records=0`）。红跑的日志不进入证据目录——红跑不是发布证据，只用来证明该项对 ACL 敏感。原件在 `.gate/v050/e2e-p6neg.full.log`。
+
+### 扫描结果（本目录）
+
+- 字面 IPv4：无
+- 域名形态 token：无
+- UUID 形状：无
+- URL userinfo 形态：无
+- 键值凭据形态：无（S7-12 通过）

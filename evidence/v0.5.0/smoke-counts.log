@@ -1,0 +1,6 @@
+[capture] run=2026-11-07T11:23:51Z commit=2797575 caddy_sha256=872caeee23f804fcb2991e26f3c7fe9526eb8a1d5003d4dedcc280c95d762f1d host_class=linux-amd64
+SMOKE leg=reality mode=serial count=30 failures=0 p50_ms=32 p95_ms=57 first_fail=-
+SMOKE leg=reality mode=concurrent count=8 failures=0 p50_ms=61 p95_ms=74 first_fail=-
+SMOKE leg=naive mode=serial count=30 failures=0 p50_ms=93 p95_ms=99 first_fail=-
+SMOKE leg=naive mode=concurrent count=8 failures=0 p50_ms=209 p95_ms=227 first_fail=-
+SMOKE UPSTREAM reality_requests=38 naive_records=38

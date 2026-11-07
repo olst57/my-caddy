@@ -1,0 +1,2 @@
+[capture] run=2026-11-07T11:23:51Z commit=2797575 host_class=linux-amd64
+caddy_sha256=872caeee23f804fcb2991e26f3c7fe9526eb8a1d5003d4dedcc280c95d762f1d

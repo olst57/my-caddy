@@ -1,0 +1,20 @@
+[capture] run=2026-11-07T11:23:51Z commit=2797575 caddy_sha256=872caeee23f804fcb2991e26f3c7fe9526eb8a1d5003d4dedcc280c95d762f1d host_class=linux-amd64
+E2E: START
+ITEM E2E-03 PASS
+E2E-07 BASELINE {"case": "unknown", "error": "No ALPN negotiated | Early data was not sent | Verify return code: 0 (ok) | --- | 40A7F5C0C2730000:error:0A000438:SSL routines:ssl3_read_bytes:tlsv1 alert internal error:../ssl/record/rec_layer_s3.c:1599:SSL alert number 80", "handshake": false, "layer4_records_delta": 0, "sni": "<HOST-6>"}
+E2E-07 BASELINE {"case": "empty", "error": "Unable to set TLS servername extension. | 40B76985997B0000:error:0A00013F:SSL routines:ssl3_ctrl:ssl3 ext invalid servername:../ssl/s3_lib.c:3503:", "handshake": false, "layer4_records_delta": 0, "note": "The client refused to construct an empty SNI extension; no TLS record left the process.", "sni": ""}
+E2E-07 BASELINE {"case": "absent", "error": "No ALPN negotiated | Early data was not sent | Verify return code: 0 (ok) | --- | 404704A7D97C0000:error:0A000438:SSL routines:ssl3_read_bytes:tlsv1 alert internal error:../ssl/record/rec_layer_s3.c:1599:SSL alert number 80", "handshake": false, "layer4_records_delta": 0, "sni": null}
+E2E-07 POSTURE: reject
+ITEM E2E-07 PASS
+ITEM E2E-01 PASS
+ITEM E2E-05a PASS
+ITEM E2E-05b PASS
+ITEM E2E-05c PASS
+ITEM E2E-02 PASS
+POSITIVE CONTROL: PASS
+ITEM E2E-04a PASS
+ITEM E2E-04b PASS
+ITEM E2E-04c PASS
+POSITIVE CONTROL CLOSING: PASS
+ITEM E2E-08 PASS
+E2E: PASS
