@@ -178,6 +178,15 @@ that exceeds the per-request timeout is a failure, not a slow success. This is
 a bounded smoke, not a soak: it says nothing about hours-long resource
 behaviour.
 
+The REALITY destination is on the **per-connection** path: the REALITY inbound
+relays the ClientHello to it for every new tunnel connection, so the smoke's
+latency is bounded by that destination's round-trip time. Measured on the test
+host: a destination about 40 ms away gave `p50=28 ms` for the 30-request
+REALITY leg, while a destination on a degraded path (1.6–2.3 s to complete its
+TLS handshake) produced 20 s timeouts in 3 of 30. Pick a destination with a
+short, stable path, and re-measure the path before treating a latency spike as
+a tunnel regression.
+
 ## What this does not prove
 
 - Production certificate chains, production decoy content and production

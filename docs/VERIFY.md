@@ -945,6 +945,14 @@ The four runs take roughly 10–20 seconds on the test host. That is a bounded
 smoke, not a soak: it makes no claim about hours-long resource behaviour, and a
 request that exceeds its timeout is a failure rather than a slow success.
 
+The REALITY destination is on the per-connection path — the inbound relays
+each ClientHello to it — so the smoke's latency is bounded by that
+destination's round-trip time. Measured on the test host: a destination about
+40 ms away gave `p50=28 ms` for the 30-request REALITY leg; a destination whose
+TLS handshake took 1.6–2.3 s produced 20 s timeouts in 3 of 30. A latency
+spike has to be attributed to the path before it is called a tunnel
+regression.
+
 **It fails closed.** Every required variable is checked before a process
 starts, and a missing or empty value exits `2` naming it. `--negative-preflight`
 proves that per variable, with no destination and no binary, by re-invoking the
