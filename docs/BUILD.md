@@ -137,8 +137,8 @@ Asia/Shanghai). When a fork is behind, it fast-forwards it with `gh repo sync`;
 `ahead` and `diverged` are reported, never forced, because that would discard
 local commits.
 
-The sync needs a `FORK_SYNC_TOKEN` repository secret: a fine-grained token with
-`Contents: read and write` on the two fork repositories. Without it the
+The sync needs a `FORK_SYNC_TOKEN` repository secret — a fine-grained token
+with `Contents: read and write` on the two fork repositories. Without it the
 workflow still runs and reports, and the issue it opens says so. The default
 `GITHUB_TOKEN` cannot write to another repository.
 
