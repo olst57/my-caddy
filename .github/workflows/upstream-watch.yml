@@ -72,4 +72,5 @@ jobs:
           fi
       - name: Dry run summary
         if: steps.check.outputs.rc == '3' && inputs.dry_run == true
-        run: printf 'dry run: an issue would have been opened\n'
+        run: |
+          printf 'dry run: an issue would have been opened\n'
