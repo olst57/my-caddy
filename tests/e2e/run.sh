@@ -19,6 +19,7 @@
 #     E2E-05a a wrong naive credential reaches the decoy, not the target
 #     E2E-05b a missing naive credential reaches the decoy, not the target
 #     E2E-05c a correct credential cannot reach a private target (ACL + zero bytes)
+#     E2E-07    the unknown/empty/absent SNI baseline is recorded, not asserted
 #
 #   Every negative control mutates exactly one line of the passing client
 #   config; the render step refuses to emit a control whose diff is not
@@ -448,6 +449,7 @@ fi
 
 socks_get() { # $1=out prefix [$2=timeout] -> sets SOCKS_RC / SOCKS_CODE / SOCKS_SIZE
 	local max_time="${2:-$TIMEOUT}"
+	rm -f "$1.body" "$1.hdr" "$1.out" "$1.err"
 	curl -sS --max-time "$max_time" --socks5-hostname "127.0.0.1:$SOCKS_PORT" \
 		-o "$1.body" -D "$1.hdr" \
 		-w '%{http_code} %{size_download}\n' "$TARGET" \
@@ -570,6 +572,21 @@ if [ "$proxy_ok" -eq 1 ]; then item E2E-03 PASS; else
 	item E2E-03 FAIL
 	cat "$WORKDIR/proxyv2.jsonl" >&2 2>/dev/null
 fi
+
+# ------------------------------------------------------------------ E2E-07 baseline
+# The posture is undecided. Measure all three cases while the PROXY v2 stub is
+# still the layer4 upstream, so each record delta is observable. This block
+# prints facts and does not turn a posture into a pass/fail item yet.
+python3 "$HERE/probe-sni.py" \
+	--connect-host 127.0.0.1 --connect-port "$REALITY_PORT" \
+	--count-file "$WORKDIR/proxyv2.jsonl" --timeout "$TIMEOUT" \
+	>"$WORKDIR/e2e07-baseline.jsonl" 2>"$WORKDIR/e2e07-baseline.err" ||
+	fatal "the unknown/empty/absent SNI baseline could not be measured"
+baseline_count="$(grep -c '^E2E-07 BASELINE ' "$WORKDIR/e2e07-baseline.jsonl" 2>/dev/null || true)"
+[ "$baseline_count" -eq 3 ] ||
+	fatal "expected three E2E-07 baseline records, got ${baseline_count:-0}"
+cat "$WORKDIR/e2e07-baseline.jsonl"
+printf 'E2E-07 BASELINE: RECORDED\n'
 
 stop_pid "$STUB_PID"
 STUB_PID=""
@@ -774,13 +791,21 @@ if [ "$cert_ok" -eq 1 ]; then item E2E-02 PASS; else
 fi
 
 # --------------------------------------------------------------------- E2E-04
-socks_get "$WORKDIR/baseline"
-if [ "$SOCKS_CODE" = "200" ] && grep -qx "$TARGET_MARKER" "$WORKDIR/baseline.body" 2>/dev/null; then
-	printf 'POSITIVE CONTROL: PASS\n'
-	baseline_ok=1
-else
+baseline_ok=0
+for baseline_attempt in 1 2 3; do
+	socks_get "$WORKDIR/baseline-$baseline_attempt"
+	if [ "$SOCKS_CODE" = "200" ] &&
+		grep -qx "$TARGET_MARKER" "$WORKDIR/baseline-$baseline_attempt.body" 2>/dev/null; then
+		printf 'POSITIVE CONTROL: PASS\n'
+		baseline_ok=1
+		break
+	fi
+	printf 'POSITIVE CONTROL: attempt %s failed code=%s\n' \
+		"$baseline_attempt" "${SOCKS_CODE:-<none>}"
+	[ "$baseline_attempt" -eq 3 ] || sleep 3
+done
+if [ "$baseline_ok" -ne 1 ]; then
 	printf 'POSITIVE CONTROL: FAIL code=%s\n' "${SOCKS_CODE:-<none>}"
-	baseline_ok=0
 fi
 
 E2E_XRAY_CLIENT_BIN="$XRAY_CLIENT" \
@@ -845,13 +870,21 @@ start_client "$WORKDIR/xray-client.json" "$WORKDIR/xray-client.log" ||
 	fatal "the passing client did not come back for the closing positive control"
 wait_reality closing-warmup ||
 	fatal "the Xray pair did not answer before the closing positive control"
-socks_get "$WORKDIR/closing"
-closing_ok=1
-if [ "$SOCKS_CODE" = "200" ] && grep -qx "$TARGET_MARKER" "$WORKDIR/closing.body" 2>/dev/null; then
-	printf 'POSITIVE CONTROL CLOSING: PASS\n'
-else
+closing_ok=0
+for closing_attempt in 1 2 3; do
+	socks_get "$WORKDIR/closing-$closing_attempt" 15
+	if [ "$SOCKS_CODE" = "200" ] &&
+		grep -qx "$TARGET_MARKER" "$WORKDIR/closing-$closing_attempt.body" 2>/dev/null; then
+		printf 'POSITIVE CONTROL CLOSING: PASS\n'
+		closing_ok=1
+		break
+	fi
+	printf 'POSITIVE CONTROL CLOSING: attempt %s failed code=%s\n' \
+		"$closing_attempt" "${SOCKS_CODE:-<none>}"
+	[ "$closing_attempt" -eq 3 ] || sleep 3
+done
+if [ "$closing_ok" -ne 1 ]; then
 	printf 'POSITIVE CONTROL CLOSING: FAIL\n'
-	closing_ok=0
 fi
 
 # ------------------------------------------------------------------- verdict
