@@ -6,9 +6,9 @@ current_phase: 05
 current_phase_name: naive/ACL assertions and fixture guards
 status: executing
 stopped_at: Phase 5 plans 01-02 verified; E2E-07 baseline recorded; awaiting posture decision.
-last_updated: "2026-11-07T06:18:24.784Z"
+last_updated: "2026-11-07T06:30:35.860Z"
 last_activity: 2026-11-07
-last_activity_desc: Phase 5 plans 01-02 verified; E2E-07 baseline recorded; awaiting posture decision
+last_activity_desc: Phase 5 plans 01-02 verified; E2E-07 baseline recorded; CI fbc1a2f green; awaiting posture decision
 state_head: 9e46d0cb11d946bd77e1ceab8d9a765eff09bbf2
 progress:
   total_phases: 3
@@ -54,7 +54,10 @@ Last activity: 2026-11-07 — Plan 05-01/05-02 verified; baseline recorded
 **Recent Trend:**
 - Phase 5 has 2/3 plans complete. The final E2E run is 9/9 with both positive
   controls, the offline suite is 26/26, and coexistence is 8/8. The remaining
-  plan is the blocking E2E-07 posture decision.
+  plan is the blocking E2E-07 posture decision. CI `gate0` and `verify` are
+  green on `fbc1a2f`:
+  <https://github.com/olst57/my-caddy/actions/runs/42347099461> and
+  <https://github.com/olst57/my-caddy/actions/runs/42347099453>.
 
 *Updated after each plan completion.*
 
@@ -103,6 +106,7 @@ affecting current work:
 - [Phase 4]: Negative controls get a 90-second budget and are classified against both client and server logs. — A wrong UUID can be rejected only after the client's REALITY retry loop exceeds the ordinary 25-second request budget.
 - [Phase 5]: The unknown/empty/absent SNI baseline is measured, not asserted. — The owner has not chosen reject, decoy, or default; encoding a posture before the answer would make the suite defend an unchosen behaviour.
 - [Phase 5]: `socks_get` clears its per-attempt body, header, output and error files before each request. — An earlier closing-control run left a stale marker behind and could have made an empty reply look successful.
+- [Phase 5]: CI is green on the recorded commit `fbc1a2f`; the exact commit also re-ran 26/26 offline and 8/8 coexistence on `hw-gz`. — The CI status is evidence for the pushed tree, not a substitute for the Linux runtime checks.
 
 ### Pending Todos
 
@@ -145,7 +149,7 @@ affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-11-07T06:18:24.784Z
+Last session: 2026-11-07T06:30:35.860Z
 Stopped at: Phase 5 plans 01-02 complete; E2E-07 baseline recorded; awaiting the
 owner's posture decision.
 Resume file: .planning/phases/05-naive-acl-assertions-and-fixture-guards/05-03-PLAN.md

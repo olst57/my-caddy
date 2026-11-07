@@ -38,6 +38,9 @@ reject-like baseline, not a default-certificate baseline.
   attempt returned an empty reply and its retry passed
 - offline gate `PASS=26 FAIL=0`
 - coexistence `CO-1..CO-8 PASS`
+- CI `gate0` and `verify` both concluded success on `fbc1a2f`:
+  <https://github.com/olst57/my-caddy/actions/runs/42347099461> and
+  <https://github.com/olst57/my-caddy/actions/runs/42347099453>
 
 An earlier run also reached nine passing items but the closing control got an
 empty reply after the backend had answered. That failed run is retained in
