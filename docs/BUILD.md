@@ -95,6 +95,30 @@ runs `scripts/build.sh --print-pins`, and (with `--pins dist/pins.txt`) checks
 the receipt against the file. It runs in the `verify` workflow before the
 artifact is built and again in `build` after both architectures are built.
 
+### Knowing when upstream moves
+
+`scripts/check-upstream.sh` compares every pin with its upstream: the Caddy and
+`xcaddy` release tags, the `forwardproxy` and `caddy-l4` default-branch heads,
+and the latest stable Go release. It only reports. It never edits
+`pins/build-inputs.env`, because a bump has to prove that the read-idle-timeout
+patch still applies and that both forks were synced before their commits move.
+
+The scheduled workflow `.github/workflows/upstream-watch.yml` runs it daily and
+opens one tracking issue when a pin is behind, commenting on that issue on later
+runs instead of creating duplicates. A manual run takes a `dry_run` input that
+prints the comparison without touching issues. The workflow fails only when a
+source cannot be read; drift is a report, not a red build.
+
+The offline test `tests/upstream/check.sh` builds its fixtures from the pins
+file, so it stays valid after a deliberate bump, and it covers the in-sync,
+stale, missing-key, bad-argument, and missing-fixture paths. `verify` runs it
+with the other static checks.
+
+A watcher is not an upgrade. Moving a pin still needs the fork sync, a patch
+rebase if the Caddy source moved, a full gate run, and a new receipt; the Go pin
+in particular tracks the toolchain of the official naiveproxy build, not the
+newest release.
+
 ## The one patch, and why `--replace` is mandatory
 
 `patches/caddy-read-idle-timeout.patch` is a compile-time requirement, not an

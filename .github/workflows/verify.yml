@@ -61,6 +61,8 @@ jobs:
           shellcheck --version | head -n2
       - name: Build inputs are pinned
         run: bash tests/pins/check.sh
+      - name: Upstream watch is tested offline
+        run: bash tests/upstream/check.sh
       - name: License record is complete
         run: bash tests/licenses/check.sh
       - name: Fixture address and protocol guard

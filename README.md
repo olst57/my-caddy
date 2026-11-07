@@ -44,6 +44,11 @@ published `caddy` binary. The `v0.4.3` build here predates this pin and reports
 `go1.26.10` in its receipt and evidence; those historical records are not
 rewritten.
 
+`scripts/check-upstream.sh` and the daily `upstream-watch` workflow report when
+a pin falls behind its upstream (Caddy, `xcaddy`, both forks, and Go). They only
+open or update one issue; they never edit the pins or start a build, because a
+bump needs a fork sync, a patch check, and a full gate run.
+
 ## The single patch, and why it is mandatory
 
 `patches/caddy-read-idle-timeout.patch` is the only patch here, and the build

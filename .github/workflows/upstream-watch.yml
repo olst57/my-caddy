@@ -1,0 +1,75 @@
+name: upstream-watch
+
+# Daily report that the pinned inputs still match the projects they come from.
+# It never edits pins/build-inputs.env and never builds: a bump is a reviewed
+# change, because a new Caddy tag can break the read-idle-timeout patch and the
+# two forks have to be synced before the pinned commits can move.
+
+on:
+  schedule:
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Report only; do not open or update an issue'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Compare pins with upstream
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          out="$(bash scripts/check-upstream.sh 2>&1)"
+          rc=$?
+          set -e
+          printf '%s\n' "$out"
+          printf 'rc=%s\n' "$rc" >> "$GITHUB_OUTPUT"
+          {
+            printf 'report<<UPSTREAM_REPORT_EOF\n'
+            printf '%s\n' "$out"
+            printf 'UPSTREAM_REPORT_EOF\n'
+          } >> "$GITHUB_OUTPUT"
+          if [ "$rc" -eq 2 ]; then
+            printf 'UPSTREAM: the watch could not read one of the sources\n' >&2
+            exit 1
+          fi
+      - name: Open or update the tracking issue
+        if: steps.check.outputs.rc == '3' && inputs.dry_run != true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPORT: ${{ steps.check.outputs.report }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title='upstream-watch: pinned inputs are behind upstream'
+          {
+            printf 'A scheduled run found pinned inputs that no longer match upstream.\n\n'
+            printf '```\n%s\n```\n\n' "$REPORT"
+            printf 'Pinned values live in `pins/build-inputs.env`. A bump is a reviewed change:\n'
+            printf 'sync the two forks, confirm `patches/caddy-read-idle-timeout.patch` still\n'
+            printf 'applies to the new Caddy tag, then re-run the gate and record the receipt.\n'
+            printf 'Go is pinned to the toolchain measured in the official naiveproxy Caddy\n'
+            printf 'build, so a newer Go is not automatically the right pin.\n\n'
+            printf 'Run: %s\n' "$RUN_URL"
+          } >issue.md
+          number="$(gh issue list --state open --limit 100 --json number,title \
+            --jq "first(.[] | select(.title == \"$title\") | .number) // empty")"
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body-file issue.md
+          else
+            gh issue create --title "$title" --body-file issue.md
+          fi
+      - name: Dry run summary
+        if: steps.check.outputs.rc == '3' && inputs.dry_run == true
+        run: printf 'dry run: an issue would have been opened\n'
