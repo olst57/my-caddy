@@ -1,0 +1,122 @@
+name: fork-sync
+
+# Fast-forward the two module forks from upstream when a token with write
+# access is configured. The build never follows a branch head: it checks out
+# the commits in pins/build-inputs.env, so a sync cannot change a build by
+# itself. Without the token the workflow only reports.
+
+on:
+  schedule:
+    - cron: '30 1 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Report only; do not sync or open an issue'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      SYNC_TOKEN: ${{ secrets.FORK_SYNC_TOKEN }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Compare forks with upstream
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          out="$(bash scripts/check-forks.sh 2>&1)"
+          rc=$?
+          set -e
+          printf '%s\n' "$out"
+          printf 'rc=%s\n' "$rc" >> "$GITHUB_OUTPUT"
+          {
+            printf 'report<<FORKS_REPORT_EOF\n'
+            printf '%s\n' "$out"
+            printf 'FORKS_REPORT_EOF\n'
+          } >> "$GITHUB_OUTPUT"
+          if [ "$rc" -eq 2 ]; then
+            printf 'FORKS: the check could not read one of the sources\n' >&2
+            exit 1
+          fi
+      - name: Fast-forward the forks
+        if: steps.check.outputs.rc == '3' && env.SYNC_TOKEN != '' && inputs.dry_run != true
+        env:
+          GH_TOKEN: ${{ secrets.FORK_SYNC_TOKEN }}
+          REPORT: ${{ steps.check.outputs.report }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$REPORT" | while IFS= read -r line; do
+            case "$line" in
+            *"state=behind"*)
+              case "$line" in
+              "FORK forwardproxy "*) repo=olst57/forwardproxy; branch=naive ;;
+              "FORK caddy_l4 "*) repo=olst57/caddy-l4; branch=master ;;
+              *) continue ;;
+              esac
+              printf 'sync %s %s\n' "$repo" "$branch"
+              gh repo sync "$repo" --branch "$branch"
+              ;;
+            esac
+          done
+      - name: Re-check after the sync
+        id: recheck
+        if: steps.check.outputs.rc == '3' && env.SYNC_TOKEN != '' && inputs.dry_run != true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          out="$(bash scripts/check-forks.sh 2>&1)"
+          rc=$?
+          set -e
+          printf '%s\n' "$out"
+          printf 'rc=%s\n' "$rc" >> "$GITHUB_OUTPUT"
+          {
+            printf 'report<<FORKS_RECHECK_EOF\n'
+            printf '%s\n' "$out"
+            printf 'FORKS_RECHECK_EOF\n'
+          } >> "$GITHUB_OUTPUT"
+          if [ "$rc" -eq 2 ]; then exit 1; fi
+      - name: Open or update the tracking issue
+        if: inputs.dry_run != true && (steps.recheck.outputs.rc == '3' || (steps.check.outputs.rc == '3' && env.SYNC_TOKEN == ''))
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPORT: ${{ steps.check.outputs.report }}
+          RECHECK: ${{ steps.recheck.outputs.report }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title='fork-sync: module forks are behind upstream'
+          {
+            printf 'The module forks no longer match the upstream branch they mirror.\n\n'
+            printf '```\n%s\n```\n\n' "$REPORT"
+            if [ -n "$RECHECK" ]; then
+              printf 'After the fast-forward attempt:\n\n```\n%s\n```\n\n' "$RECHECK"
+            fi
+            if [ -z "$SYNC_TOKEN" ]; then
+              printf 'No `FORK_SYNC_TOKEN` secret is configured, so nothing was synced.\n'
+              printf 'Add a fine-grained token with contents write on the two forks to enable it,\n'
+              printf 'or use the fork page sync button.\n\n'
+            fi
+            printf 'A sync does not move a pin. Bumping `pins/build-inputs.env` is still a\n'
+            printf 'reviewed change that needs the gate and a new receipt.\n\n'
+            printf 'Run: %s\n' "$RUN_URL"
+          } >issue.md
+          number="$(gh issue list --state open --limit 100 --json number,title \
+            --jq "first(.[] | select(.title == \"$title\") | .number) // empty")"
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body-file issue.md
+          else
+            gh issue create --title "$title" --body-file issue.md
+          fi
+      - name: Dry run summary
+        if: steps.check.outputs.rc == '3' && inputs.dry_run == true
+        run: |
+          printf 'dry run: no sync and no issue\n'

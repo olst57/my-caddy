@@ -123,6 +123,31 @@ rebase if the Caddy source moved, a full gate run, and a new receipt; the Go pin
 in particular tracks the toolchain of the official naiveproxy build, not the
 newest release.
 
+### Keeping the module forks current
+
+Both modules are already built from this project's forks (`olst57/forwardproxy`
+and `olst57/caddy-l4`), and both forks mirror one upstream branch:
+`forwardproxy` mirrors `klzgrad/forwardproxy` `naive`, and `caddy-l4` mirrors
+`mholt/caddy-l4` `master`.
+
+`scripts/check-forks.sh` compares each fork with that branch and prints
+`FORK <name> ... state=in-sync|behind|ahead|diverged`. The scheduled
+`.github/workflows/fork-sync.yml` runs it daily at 01:30 UTC (09:30
+Asia/Shanghai). When a fork is behind, it fast-forwards it with `gh repo sync`;
+`ahead` and `diverged` are reported, never forced, because that would discard
+local commits.
+
+The sync needs a `FORK_SYNC_TOKEN` repository secret: a fine-grained token with
+`Contents: read and write` on the two fork repositories. Without it the
+workflow still runs and reports, and the issue it opens says so. The default
+`GITHUB_TOKEN` cannot write to another repository.
+
+**A sync does not move a pin.** The build checks out the exact commits in
+`pins/build-inputs.env`, so syncing only prepares the fork for a future bump;
+it cannot change today's binary. `tests/forks/check.sh` covers the in-sync,
+behind, diverged, unexpected-status, missing-key, and missing-fixture paths,
+and `verify` runs it with the static checks.
+
 ## The one patch, and why `--replace` is mandatory
 
 `patches/caddy-read-idle-timeout.patch` is a compile-time requirement, not an

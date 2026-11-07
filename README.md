@@ -49,6 +49,11 @@ a pin falls behind its upstream (Caddy, `xcaddy`, both forks, and Go). They only
 open or update one issue; they never edit the pins or start a build, because a
 bump needs a fork sync, a patch check, and a full gate run.
 
+The module forks are kept current separately: `scripts/check-forks.sh` and the
+daily `fork-sync` workflow fast-forward them from upstream when a
+`FORK_SYNC_TOKEN` secret is configured, and otherwise report. A sync never
+moves a pin, so it cannot change the binary by itself.
+
 ## The single patch, and why it is mandatory
 
 `patches/caddy-read-idle-timeout.patch` is the only patch here, and the build
