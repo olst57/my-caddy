@@ -63,11 +63,13 @@ jobs:
         run: bash tests/pins/check.sh
       - name: License record is complete
         run: bash tests/licenses/check.sh
+      - name: Fixture address and protocol guard
+        run: bash tests/fixtures/check.sh
       - name: E2E harness is syntax-checked, not executed
         run: |
           set -euo pipefail
-          bash -n tests/e2e/*.sh
-          shellcheck -S warning tests/e2e/*.sh
+          bash -n tests/e2e/*.sh tests/fixtures/check.sh
+          shellcheck -S warning tests/e2e/*.sh tests/fixtures/check.sh
           python3 -m py_compile tests/e2e/*.py
           bash tests/e2e/run.sh --negative-preflight
       - name: Build amd64 artifact

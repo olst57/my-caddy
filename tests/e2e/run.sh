@@ -16,6 +16,9 @@
 #     E2E-04a a wrong UUID opens no tunnel
 #     E2E-04b a wrong publicKey opens no tunnel
 #     E2E-04c a wrong shortId opens no tunnel
+#     E2E-05a a wrong naive credential reaches the decoy, not the target
+#     E2E-05b a missing naive credential reaches the decoy, not the target
+#     E2E-05c a correct credential cannot reach a private target (ACL + zero bytes)
 #
 #   Every negative control mutates exactly one line of the passing client
 #   config; the render step refuses to emit a control whose diff is not
@@ -82,7 +85,10 @@ PROXYV2_DEST="${E2E_PROXYV2_DEST:-127.0.0.1:8443}"
 REALITY_PORT=8443
 SERVER_PORT=19099
 BACKEND_PORT=18080
+TARGET_PORT=18081
 SOCKS_PORT=10802
+NAIVE_TARGET_MARKER="E2E-NAIVE-TARGET-MARKER"
+TARGET_COUNT="$WORKDIR/target-count.jsonl"
 
 REQUIRED_VARS=(
 	CADDY_BIN
@@ -107,9 +113,10 @@ SERVER_PID=""
 CADDY_PID=""
 BACKEND_PID=""
 STUB_PID=""
+TARGET_PID=""
 
 cleanup_all() {
-	cleanup "$CLIENT_PID" "$SERVER_PID" "$CADDY_PID" "$BACKEND_PID" "$STUB_PID"
+	cleanup "$CLIENT_PID" "$SERVER_PID" "$CADDY_PID" "$BACKEND_PID" "$STUB_PID" "$TARGET_PID"
 }
 trap cleanup_all EXIT
 
@@ -211,6 +218,9 @@ render_overlay() {
 
 	literal_replace '<NAIVE_USER>' "$USER_TOKEN" <"$REPO_ROOT/deploy/Caddyfile" |
 		literal_replace '<NAIVE_PASSWORD>' "$PASS_TOKEN" |
+		literal_replace $'\torder forward_proxy before reverse_proxy' \
+			$'\tdebug\n\torder forward_proxy before reverse_proxy' |
+		literal_replace 'probe_resistance example.com' 'probe_resistance localhost' |
 		literal_replace 'servers :443 {' 'servers :8443 {' |
 		literal_replace ':443, a.test {' ':8443, a.test:8443 {' |
 		literal_replace 'b.test {' 'b.test:8443 {' |
@@ -219,12 +229,16 @@ render_overlay() {
 		literal_replace 'reverse_proxy 127.0.0.1:8080' 'reverse_proxy 127.0.0.1:18080' \
 			>"$overlay" || return 2
 
-	literal_replace 'reverse_proxy 127.0.0.1:18080' 'reverse_proxy 127.0.0.1:8080' <"$overlay" |
+	# `debug` is a test-only line. Strip it before the reverse diff; the
+	# forward diff still proves every other line is a literal substitution.
+	sed '/^[[:space:]]*debug[[:space:]]*$/d' "$overlay" |
+		literal_replace 'reverse_proxy 127.0.0.1:18080' 'reverse_proxy 127.0.0.1:8080' |
 		literal_replace 'upstream 127.0.0.1:19099' 'upstream 127.0.0.1:19098' |
 		literal_replace "@reality tls sni $SNI" '@reality tls sni b.test' |
 		literal_replace 'b.test:8443 {' 'b.test {' |
 		literal_replace ':8443, a.test:8443 {' ':443, a.test {' |
 		literal_replace 'servers :8443 {' 'servers :443 {' |
+		literal_replace 'probe_resistance localhost' 'probe_resistance example.com' |
 		literal_replace "$USER_TOKEN" '<NAIVE_USER>' |
 		literal_replace "$PASS_TOKEN" '<NAIVE_PASSWORD>' \
 			>"$reversed" || return 2
@@ -237,6 +251,10 @@ render_overlay() {
 
 	# F-01 guard: a non-443 fixture must spell the site address as
 	# `:port, host:port`, and the protocol pin must survive the derivation.
+	grep -qE '^[[:space:]]*debug[[:space:]]*$' "$overlay" || {
+		printf 'FATAL: test overlay is missing the debug log pin\n' >&2
+		return 2
+	}
 	grep -q ':8443,' "$overlay" || {
 		printf 'FATAL: overlay lost the `:port, host:port` address shape\n' >&2
 		return 2
@@ -303,7 +321,7 @@ preflight() {
 	[ -x "$XRAY_SERVER" ] || fatal "no executable Xray server at $XRAY_SERVER"
 	[ -x "$XRAY_CLIENT" ] || fatal "no executable Xray client at $XRAY_CLIENT"
 	[ -f "$REPO_ROOT/deploy/Caddyfile" ] || fatal "deploy/Caddyfile missing"
-	for port in "$REALITY_PORT" "$SERVER_PORT" "$BACKEND_PORT" "$SOCKS_PORT"; do
+	for port in "$REALITY_PORT" "$SERVER_PORT" "$BACKEND_PORT" "$TARGET_PORT" "$SOCKS_PORT"; do
 		if port_busy "$port"; then
 			fatal "port $port is already in use; this harness needs it free"
 		fi
@@ -311,8 +329,11 @@ preflight() {
 
 	mkdir -p "$WORKDIR" || fatal "cannot create $WORKDIR"
 	rm -f "$WORKDIR"/xray-server.log "$WORKDIR"/xray-client.log "$WORKDIR"/caddy.log \
-		"$WORKDIR"/backend.log "$WORKDIR"/*.jsonl "$WORKDIR"/adapt.json "$WORKDIR"/adapt.err
+		"$WORKDIR"/backend.log "$WORKDIR"/target.log "$WORKDIR"/*.jsonl \
+		"$WORKDIR"/adapt.json "$WORKDIR"/adapt.err
 	render_overlay || fatal "overlay render failed"
+	bash "$REPO_ROOT/tests/fixtures/check.sh" "$WORKDIR/Caddyfile" ||
+		fatal "fixture guard rejected the rendered overlay"
 	"$CADDY_BIN" adapt --config "$WORKDIR/Caddyfile" --adapter caddyfile \
 		>"$WORKDIR/adapt.json" 2>"$WORKDIR/adapt.err" || {
 		cat "$WORKDIR/adapt.err" >&2
@@ -425,61 +446,6 @@ if [ "$MODE" = preflight ]; then
 	exit 0
 fi
 
-# ---------------------------------------------------------------------- stack
-printf 'E2E: START\n'
-
-WEB_PORT="$BACKEND_PORT" E2E_INNER_PATH=/inner setsid python3 "$HERE/site-backend.py" \
-	>"$WORKDIR/backend.log" 2>&1 </dev/null &
-BACKEND_PID=$!
-
-XDG_DATA_HOME="$WORKDIR/data" setsid "$CADDY_BIN" run \
-	--config "$WORKDIR/Caddyfile" --adapter caddyfile \
-	>"$WORKDIR/caddy.log" 2>&1 </dev/null &
-CADDY_PID=$!
-
-setsid "$XRAY_SERVER" run -c "$WORKDIR/xray-server.json" \
-	>"$WORKDIR/xray-server.log" 2>&1 </dev/null &
-SERVER_PID=$!
-
-setsid "$XRAY_CLIENT" run -c "$WORKDIR/xray-client.json" \
-	>"$WORKDIR/xray-client.log" 2>&1 </dev/null &
-CLIENT_PID=$!
-
-for port in "$REALITY_PORT" "$SERVER_PORT" "$BACKEND_PORT" "$SOCKS_PORT"; do
-	wait_port "$port" 30 || {
-		printf 'FATAL: nothing is listening on %s after 30s\n' "$port" >&2
-		tail -n 20 "$WORKDIR/caddy.log" >&2
-		tail -n 20 "$WORKDIR/xray-server.log" >&2
-		tail -n 20 "$WORKDIR/xray-client.log" >&2
-		printf 'E2E: FAIL\n' >&2
-		exit 2
-	}
-done
-sleep 1
-
-start_client() { # $1=config $2=log
-	stop_pid "$CLIENT_PID"
-	CLIENT_PID=""
-	for _ in $(seq 1 20); do
-		port_busy "$SOCKS_PORT" || break
-		sleep 0.25
-	done
-	setsid "$XRAY_CLIENT" run -c "$1" >"$2" 2>&1 </dev/null &
-	CLIENT_PID=$!
-	wait_port "$SOCKS_PORT" 20 || return 1
-	return 0
-}
-
-start_server() {
-	stop_pid "$SERVER_PID"
-	SERVER_PID=""
-	setsid "$XRAY_SERVER" run -c "$WORKDIR/xray-server.json" \
-		>"$WORKDIR/xray-server.log" 2>&1 </dev/null &
-	SERVER_PID=$!
-	wait_port "$SERVER_PORT" 20 || return 1
-	return 0
-}
-
 socks_get() { # $1=out prefix [$2=timeout] -> sets SOCKS_RC / SOCKS_CODE / SOCKS_SIZE
 	local max_time="${2:-$TIMEOUT}"
 	curl -sS --max-time "$max_time" --socks5-hostname "127.0.0.1:$SOCKS_PORT" \
@@ -491,71 +457,75 @@ socks_get() { # $1=out prefix [$2=timeout] -> sets SOCKS_RC / SOCKS_CODE / SOCKS
 	SOCKS_SIZE="$(awk '{print $2}' "$1.out" 2>/dev/null)"
 }
 
-log_from() { # $1=log $2=byte offset
-	tail -c +"$(( $2 + 1 ))" "$1" 2>/dev/null
+# Xray opens its inbound and SOCKS sockets before REALITY has finished
+# settling, so a request immediately after `wait_port` can be lost. Poll the
+# same pair with backoff instead of restarting it: a restart resets the very
+# initialization the wait is meant to absorb. Callers still assert their own
+# request afterwards; this only removes startup noise from a functional check.
+wait_reality() { # $1=output prefix [$2=attempts]
+	local prefix="$1" attempts="${2:-8}" attempt
+	for attempt in $(seq 1 "$attempts"); do
+		socks_get "$WORKDIR/$prefix-$attempt" 8
+		if [ "$SOCKS_CODE" = "200" ] &&
+			grep -qx "$TARGET_MARKER" "$WORKDIR/$prefix-$attempt.body" 2>/dev/null; then
+			return 0
+		fi
+		printf 'XRAY %s attempt %s not ready yet; retrying\n' "$prefix" "$attempt" >&2
+		[ "$attempt" -eq "$attempts" ] || sleep 3
+	done
+	return 1
 }
 
-# --------------------------------------------------------------------- E2E-01
-caddy_offset=$(wc -c <"$WORKDIR/caddy.log" 2>/dev/null || printf '0')
-socks_get "$WORKDIR/inner"
-inner_ok=1
-[ "$SOCKS_RC" -eq 0 ] || inner_ok=0
-[ "$SOCKS_CODE" = "200" ] || inner_ok=0
-[ "${SOCKS_SIZE:-0}" -gt 0 ] 2>/dev/null || inner_ok=0
-grep -qx "$TARGET_MARKER" "$WORKDIR/inner.body" 2>/dev/null || inner_ok=0
-grep -qi '^x-site: e2e-inner' "$WORKDIR/inner.hdr" 2>/dev/null || inner_ok=0
-if grep -q 'alert 40' "$WORKDIR/xray-client.log" 2>/dev/null; then inner_ok=0; fi
-if log_from "$WORKDIR/caddy.log" "$caddy_offset" | grep -q 'layer4.*EOF'; then inner_ok=0; fi
-if [ "$inner_ok" -eq 1 ]; then
-	item E2E-01 PASS
-else
-	item E2E-01 FAIL
-	printf '  curl exit=%s code=%s size=%s\n' "$SOCKS_RC" "${SOCKS_CODE:-<none>}" "${SOCKS_SIZE:-<none>}" >&2
-	head -c 400 "$WORKDIR/inner.body" >&2 2>/dev/null
-	cat "$WORKDIR/inner.err" >&2 2>/dev/null
-	tail -n 20 "$WORKDIR/xray-client.log" >&2 2>/dev/null
-fi
+# ---------------------------------------------------------------------- stack
+printf 'E2E: START\n'
 
-# --------------------------------------------------------------------- E2E-02
-cert_ok=1
-if ! python3 "$HERE/probe-cert.py" fetch --connect "127.0.0.1:$REALITY_PORT" \
-	--sni "$SNI" --alpn h2 --out "$WORKDIR/cert-probe.json" \
-	>"$WORKDIR/cert-probe.log" 2>&1; then
-	cert_ok=0
-	printf '  probe through the listener failed:\n' >&2
-	sed 's/^/    /' "$WORKDIR/cert-probe.log" >&2
-fi
-for index in 1 2 3; do
-	if ! python3 "$HERE/probe-cert.py" fetch --connect "$DEST" \
-		--sni "$SNI" --alpn h2 --out "$WORKDIR/cert-direct-$index.json" \
-		>>"$WORKDIR/cert-probe.log" 2>&1; then
-		cert_ok=0
-		printf '  direct fetch %s of %s failed\n' "$index" "$DEST" >&2
-		tail -n 5 "$WORKDIR/cert-probe.log" >&2
-	fi
+WEB_PORT="$BACKEND_PORT" E2E_INNER_PATH=/inner setsid python3 "$HERE/site-backend.py" \
+	>"$WORKDIR/backend.log" 2>&1 </dev/null &
+BACKEND_PID=$!
+
+TARGET_PORT="$TARGET_PORT" TARGET_COUNT_FILE="$TARGET_COUNT" \
+	setsid python3 "$HERE/backend-counting.py" \
+	>"$WORKDIR/target.log" 2>&1 </dev/null &
+TARGET_PID=$!
+
+XDG_DATA_HOME="$WORKDIR/data" setsid "$CADDY_BIN" run \
+	--config "$WORKDIR/Caddyfile" --adapter caddyfile \
+	>"$WORKDIR/caddy.log" 2>&1 </dev/null &
+CADDY_PID=$!
+
+for port in "$REALITY_PORT" "$BACKEND_PORT" "$TARGET_PORT"; do
+	wait_port "$port" 30 || {
+		printf 'FATAL: nothing is listening on %s after 30s\n' "$port" >&2
+		tail -n 20 "$WORKDIR/caddy.log" >&2
+		tail -n 20 "$WORKDIR/backend.log" >&2
+		tail -n 20 "$WORKDIR/target.log" >&2
+		printf 'E2E: FAIL\n' >&2
+		exit 2
+	}
 done
-if [ "$cert_ok" -eq 1 ]; then
-	if ! python3 "$HERE/probe-cert.py" compare --probe "$WORKDIR/cert-probe.json" \
-		--expected "$WORKDIR/cert-direct-1.json" \
-		--expected "$WORKDIR/cert-direct-2.json" \
-		--expected "$WORKDIR/cert-direct-3.json" \
-		>"$WORKDIR/cert-compare.log" 2>&1; then
-		cert_ok=0
-	fi
-	sed 's/^/  /' "$WORKDIR/cert-compare.log" >&2
+sleep 1
+
+CA="$WORKDIR/data/caddy/pki/authorities/local/root.crt"
+[ -f "$CA" ] || fatal "Caddy internal CA not found at $CA"
+
+# Prove the counting fixture itself works before using a zero delta as
+# evidence. This direct request never crosses the proxy and is discarded.
+if ! curl -fsS --noproxy '*' --max-time "$TIMEOUT" \
+	"http://127.0.0.1:$TARGET_PORT/counter-control" \
+	-o "$WORKDIR/target-control.body" 2>"$WORKDIR/target-control.err"; then
+	fatal "the counting target did not answer a direct request"
 fi
-if [ "$cert_ok" -eq 1 ]; then item E2E-02 PASS; else
-	item E2E-02 FAIL
-	printf '  probe cert: %s\n' "$(tr -d '\n' <"$WORKDIR/cert-probe.json" 2>/dev/null)" >&2
+if ! grep -qx "$NAIVE_TARGET_MARKER" "$WORKDIR/target-control.body" ||
+	[ "$(records "$TARGET_COUNT")" -ne 1 ]; then
+	fatal "the counting target did not record exactly one direct request"
 fi
+: >"$TARGET_COUNT"
+printf 'COUNTER CONTROL: PASS\n'
 
 # --------------------------------------------------------------------- E2E-03
-stop_pid "$SERVER_PID"
-SERVER_PID=""
-stop_pid "$CLIENT_PID"
-CLIENT_PID=""
-for _ in $(seq 1 20); do port_busy "$SERVER_PORT" || break; sleep 0.25; done
-
+# The PROXY v2 capture needs the layer4 upstream port, so it runs before the
+# real Xray server binds it. Starting the stub and then the one real server
+# avoids a stop/restart cycle that can leave the REALITY listener delayed.
 setsid python3 "$HERE/proxyv2.py" --port "$SERVER_PORT" --sni "$SNI" \
 	--out "$WORKDIR/proxyv2.jsonl" --connections 1 \
 	>"$WORKDIR/proxyv2.log" 2>&1 </dev/null &
@@ -603,11 +573,207 @@ fi
 
 stop_pid "$STUB_PID"
 STUB_PID=""
-start_server || fatal "the Xray server did not come back on $SERVER_PORT"
+for _ in $(seq 1 40); do
+	port_busy "$SERVER_PORT" || break
+	sleep 0.25
+done
+port_busy "$SERVER_PORT" && fatal "the PROXY v2 stub did not release $SERVER_PORT"
+
+setsid "$XRAY_SERVER" run -c "$WORKDIR/xray-server.json" \
+	>"$WORKDIR/xray-server.log" 2>&1 </dev/null &
+SERVER_PID=$!
+setsid "$XRAY_CLIENT" run -c "$WORKDIR/xray-client.json" \
+	>"$WORKDIR/xray-client.log" 2>&1 </dev/null &
+CLIENT_PID=$!
+for port in "$SERVER_PORT" "$SOCKS_PORT"; do
+	wait_port "$port" 30 || fatal "nothing is listening on $port after 30s"
+done
+wait_reality xray-warmup ||
+	fatal "the Xray pair did not answer within the readiness window"
+printf 'XRAY WARMUP: PASS\n'
+
+start_client() { # $1=config $2=log
+	stop_pid "$CLIENT_PID"
+	CLIENT_PID=""
+	for _ in $(seq 1 20); do
+		port_busy "$SOCKS_PORT" || break
+		sleep 0.25
+	done
+	setsid "$XRAY_CLIENT" run -c "$1" >"$2" 2>&1 </dev/null &
+	CLIENT_PID=$!
+	wait_port "$SOCKS_PORT" 20 || return 1
+	return 0
+}
+
+log_from() { # $1=log $2=byte offset
+	tail -c +"$(( $2 + 1 ))" "$1" 2>/dev/null
+}
+
+naive_probe() { # $1=json output $2=auth mode $3=expect mode $4=target
+	python3 "$HERE/naive-tunnel.py" \
+		--connect-host 127.0.0.1 --connect-port "$REALITY_PORT" \
+		--sni a.test --ca "$CA" --target "$4" \
+		--auth "$2" --expect "$3" --user "$USER_TOKEN" --password "$PASS_TOKEN" \
+		--timeout "$TIMEOUT" >"$1" 2>"$1.err"
+}
+
+# --------------------------------------------------------------------- E2E-01
+inner_ok=0
+for attempt in 1 2 3; do
+	caddy_offset=$(wc -c <"$WORKDIR/caddy.log" 2>/dev/null || printf '0')
+	socks_get "$WORKDIR/inner-$attempt"
+	attempt_ok=1
+	[ "$SOCKS_RC" -eq 0 ] || attempt_ok=0
+	[ "$SOCKS_CODE" = "200" ] || attempt_ok=0
+	[ "${SOCKS_SIZE:-0}" -gt 0 ] 2>/dev/null || attempt_ok=0
+	grep -qx "$TARGET_MARKER" "$WORKDIR/inner-$attempt.body" 2>/dev/null || attempt_ok=0
+	grep -qi '^x-site: e2e-inner' "$WORKDIR/inner-$attempt.hdr" 2>/dev/null || attempt_ok=0
+	if grep -q 'alert 40' "$WORKDIR/xray-client.log" 2>/dev/null; then attempt_ok=0; fi
+	if log_from "$WORKDIR/caddy.log" "$caddy_offset" | grep -q 'layer4.*EOF'; then attempt_ok=0; fi
+	if [ "$attempt_ok" -eq 1 ]; then
+		inner_ok=1
+		cp "$WORKDIR/inner-$attempt.body" "$WORKDIR/inner.body"
+		cp "$WORKDIR/inner-$attempt.hdr" "$WORKDIR/inner.hdr"
+		break
+	fi
+	printf '  E2E-01 attempt %s failed; retrying\n' "$attempt" >&2
+	[ "$attempt" -eq 3 ] || sleep 2
+done
+if [ "$inner_ok" -eq 1 ]; then
+	item E2E-01 PASS
+else
+	item E2E-01 FAIL
+	printf '  curl exit=%s code=%s size=%s\n' "$SOCKS_RC" "${SOCKS_CODE:-<none>}" "${SOCKS_SIZE:-<none>}" >&2
+	head -c 400 "$WORKDIR/inner-3.body" >&2 2>/dev/null
+	cat "$WORKDIR/inner-3.err" >&2 2>/dev/null
+	tail -n 20 "$WORKDIR/xray-client.log" >&2 2>/dev/null
+fi
+
+# --------------------------------------------------------------------- E2E-05
+naive_count_before="$(records "$TARGET_COUNT")"
+naive_probe "$WORKDIR/naive-wrong.json" wrong decoy "localhost:$TARGET_PORT"
+naive_wrong_rc=$?
+naive_count_after="$(records "$TARGET_COUNT")"
+naive_wrong_ok=1
+[ "$naive_wrong_rc" -eq 0 ] || naive_wrong_ok=0
+[ "$naive_count_before" = "$naive_count_after" ] || naive_wrong_ok=0
+grep -q '"decoy_page": true' "$WORKDIR/naive-wrong.json" 2>/dev/null || naive_wrong_ok=0
+grep -q '"target_marker": false' "$WORKDIR/naive-wrong.json" 2>/dev/null || naive_wrong_ok=0
+if [ "$naive_wrong_ok" -eq 1 ]; then
+	item E2E-05a PASS
+else
+	item E2E-05a FAIL
+	printf '  counter before=%s after=%s rc=%s\n' \
+		"$naive_count_before" "$naive_count_after" "$naive_wrong_rc" >&2
+	cat "$WORKDIR/naive-wrong.json" >&2 2>/dev/null
+	cat "$WORKDIR/naive-wrong.json.err" >&2 2>/dev/null
+fi
+
+naive_count_before="$(records "$TARGET_COUNT")"
+naive_probe "$WORKDIR/naive-missing.json" missing decoy "localhost:$TARGET_PORT"
+naive_missing_rc=$?
+naive_count_after="$(records "$TARGET_COUNT")"
+naive_missing_ok=1
+[ "$naive_missing_rc" -eq 0 ] || naive_missing_ok=0
+[ "$naive_count_before" = "$naive_count_after" ] || naive_missing_ok=0
+grep -q '"decoy_page": true' "$WORKDIR/naive-missing.json" 2>/dev/null || naive_missing_ok=0
+grep -q '"target_marker": false' "$WORKDIR/naive-missing.json" 2>/dev/null || naive_missing_ok=0
+if [ "$naive_missing_ok" -eq 1 ]; then
+	item E2E-05b PASS
+else
+	item E2E-05b FAIL
+	printf '  counter before=%s after=%s rc=%s\n' \
+		"$naive_count_before" "$naive_count_after" "$naive_missing_rc" >&2
+	cat "$WORKDIR/naive-missing.json" >&2 2>/dev/null
+	cat "$WORKDIR/naive-missing.json.err" >&2 2>/dev/null
+fi
+
+naive_count_before="$(records "$TARGET_COUNT")"
+caddy_offset=$(wc -c <"$WORKDIR/caddy.log" 2>/dev/null || printf '0')
+naive_probe "$WORKDIR/naive-private.json" correct not-target "127.0.0.1:$TARGET_PORT"
+naive_private_rc=$?
+naive_count_after="$(records "$TARGET_COUNT")"
+sleep 1
+caddy_delta="$(log_from "$WORKDIR/caddy.log" "$caddy_offset")"
+naive_private_ok=1
+[ "$naive_private_rc" -eq 0 ] || naive_private_ok=0
+[ "$naive_count_before" = "$naive_count_after" ] || naive_private_ok=0
+grep -q '"target_marker": false' "$WORKDIR/naive-private.json" 2>/dev/null || naive_private_ok=0
+printf '%s\n' "$caddy_delta" | grep -q 'no allowed IP addresses for 127.0.0.1' ||
+	naive_private_ok=0
+printf '%s\n' "$caddy_delta" | grep -q '"status":403' ||
+	naive_private_ok=0
+if ! grep -q '"decoy_page": true' "$WORKDIR/naive-private.json" 2>/dev/null &&
+	! grep -q '"body_bytes": 0' "$WORKDIR/naive-private.json" 2>/dev/null; then
+	naive_private_ok=0
+fi
+if [ "$naive_private_ok" -eq 1 ]; then
+	item E2E-05c PASS
+else
+	item E2E-05c FAIL
+	printf '  counter before=%s after=%s rc=%s\n' \
+		"$naive_count_before" "$naive_count_after" "$naive_private_rc" >&2
+	cat "$WORKDIR/naive-private.json" >&2 2>/dev/null
+	cat "$WORKDIR/naive-private.json.err" >&2 2>/dev/null
+	printf '%s\n' "$caddy_delta" | tail -n 20 >&2
+fi
+
+# --------------------------------------------------------------------- E2E-02
+cert_ok=1
+rm -f "$WORKDIR/cert-probe.json"
+: >"$WORKDIR/cert-probe.log"
+probe_ready=0
+for attempt in 1 2 3; do
+	if python3 "$HERE/probe-cert.py" fetch --connect "127.0.0.1:$REALITY_PORT" \
+		--sni "$SNI" --alpn h2 --timeout 30 --out "$WORKDIR/cert-probe.json" \
+		>>"$WORKDIR/cert-probe.log" 2>&1; then
+		probe_ready=1
+		break
+	fi
+	printf 'CERT probe attempt %s failed; retrying\n' "$attempt" >&2
+	[ "$attempt" -eq 3 ] || sleep 2
+done
+if [ "$probe_ready" -ne 1 ]; then
+	cert_ok=0
+	printf '  probe through the listener failed:\n' >&2
+	sed 's/^/    /' "$WORKDIR/cert-probe.log" >&2
+fi
+for index in 1 2 3; do
+	fetched=0
+	for attempt in 1 2 3; do
+		if python3 "$HERE/probe-cert.py" fetch --connect "$DEST" \
+			--sni "$SNI" --alpn h2 --timeout 30 \
+			--out "$WORKDIR/cert-direct-$index.json" \
+			>>"$WORKDIR/cert-probe.log" 2>&1; then
+			fetched=1
+			break
+		fi
+		printf '  direct fetch %s of %s attempt %s failed; retrying\n' \
+			"$index" "$DEST" "$attempt" >&2
+		[ "$attempt" -eq 3 ] || sleep 2
+	done
+	if [ "$fetched" -ne 1 ]; then
+		cert_ok=0
+		printf '  direct fetch %s of %s failed after three attempts\n' "$index" "$DEST" >&2
+		tail -n 5 "$WORKDIR/cert-probe.log" >&2
+	fi
+done
+if [ "$cert_ok" -eq 1 ]; then
+	if ! python3 "$HERE/probe-cert.py" compare --probe "$WORKDIR/cert-probe.json" \
+		--expected "$WORKDIR/cert-direct-1.json" \
+		--expected "$WORKDIR/cert-direct-2.json" \
+		--expected "$WORKDIR/cert-direct-3.json" \
+		>"$WORKDIR/cert-compare.log" 2>&1; then
+		cert_ok=0
+	fi
+	sed 's/^/  /' "$WORKDIR/cert-compare.log" >&2
+fi
+if [ "$cert_ok" -eq 1 ]; then item E2E-02 PASS; else
+	item E2E-02 FAIL
+	printf '  probe cert: %s\n' "$(tr -d '\n' <"$WORKDIR/cert-probe.json" 2>/dev/null)" >&2
+fi
 
 # --------------------------------------------------------------------- E2E-04
-start_client "$WORKDIR/xray-client.json" "$WORKDIR/xray-client.log" ||
-	fatal "the passing client did not come back on $SOCKS_PORT"
 socks_get "$WORKDIR/baseline"
 if [ "$SOCKS_CODE" = "200" ] && grep -qx "$TARGET_MARKER" "$WORKDIR/baseline.body" 2>/dev/null; then
 	printf 'POSITIVE CONTROL: PASS\n'
@@ -677,6 +843,8 @@ run_control E2E-04c short_id
 
 start_client "$WORKDIR/xray-client.json" "$WORKDIR/xray-client.log" ||
 	fatal "the passing client did not come back for the closing positive control"
+wait_reality closing-warmup ||
+	fatal "the Xray pair did not answer before the closing positive control"
 socks_get "$WORKDIR/closing"
 closing_ok=1
 if [ "$SOCKS_CODE" = "200" ] && grep -qx "$TARGET_MARKER" "$WORKDIR/closing.body" 2>/dev/null; then
@@ -687,7 +855,7 @@ else
 fi
 
 # ------------------------------------------------------------------- verdict
-if [ "$FAILED" -eq 0 ] && [ "$PASSED" -eq 6 ] && [ "$closing_ok" -eq 1 ]; then
+if [ "$FAILED" -eq 0 ] && [ "$PASSED" -eq 9 ] && [ "$closing_ok" -eq 1 ]; then
 	printf 'E2E: PASS\n'
 	exit 0
 fi

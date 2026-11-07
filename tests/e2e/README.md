@@ -18,10 +18,11 @@ test config.
 | `8443/tcp` | the Caddy listener (stands in for the delivery `:443`) | Caddy |
 | `19099/tcp` | REALITY inbound | Xray server, or the PROXY v2 stub |
 | `18080/tcp` | site reverse_proxy upstream and the tunnel's inner target | `site-backend.py` |
+| `18081/tcp` | counting target for the naive ACL and credential checks | `backend-counting.py` |
 | `10802/tcp` | SOCKS inbound of the Xray client | Xray client |
 
 `443` and `19098` are deliberately not touched: the harness refuses to start if
-`8443`, `19099`, `18080` or `10802` is already in use.
+`8443`, `19099`, `18080`, `18081` or `10802` is already in use.
 
 The harness needs **root**, because Caddy binds `8443` and its internal CA has
 to be created under the work directory.
@@ -45,6 +46,23 @@ The server template's `freedom` outbound carries one explicit, test-only
 26 otherwise treats a loopback destination as private and blackholes it, which
 would make E2E-01 fail before the tunnel's payload is exercised. The rule is
 scoped to this fixture; it is not a production recommendation.
+
+The E2E Caddyfile also substitutes the delivery file's `probe_resistance`
+domain with `localhost` for the run. The wrong- and missing-credential items
+ask for `localhost:<target-port>`; forwardproxy's probe-resistance branch then
+serves its built-in decoy page without dialing the counting target. If a
+future regression tunnels the request instead, `localhost` reaches the same
+counting target and makes the counter delta nonzero. The delivery file is not
+changed; the substitution is reversed with the other overlay edits.
+
+The test overlay also inserts the global `debug` directive and removes it
+during the reverse diff. forwardproxy returns a CONNECT `200` before its ACL
+lookup, and Caddy records the subsequent `no allowed IP addresses` error at
+debug level only. The private-target item therefore reads a scoped debug log
+window; the delivery file keeps its normal log level. The private-target probe
+also sends a plain HTTP GET inside the tunnel. If an allow rule reaches the
+overlay, the counting target records that request and returns its marker, so
+the item is red independently of the log line.
 
 ## Required environment
 
@@ -88,14 +106,17 @@ before any process exists.
 
 | Item | Assertion |
 |---|---|
-| `E2E-01` | A `curl` through the SOCKS inbound returns `200`, the target marker and `X-Site: e2e-inner`; no `alert 40` in the client log; no layer4 `EOF` in the Caddy log for the item window. |
-| `E2E-02` | The probe through the listener is TLS 1.3 with ALPN `h2`, and its SAN set, issuer, validity window and leaf sha256 match a live fetch of the destination. |
+| `E2E-01` | A `curl` through the SOCKS inbound returns `200`, the target marker and `X-Site: e2e-inner`; no `alert 40` in the client log; no layer4 `EOF` in the Caddy log for the item window. A transient first request is retried up to three times; a request that never satisfies all facts is red. |
+| `E2E-02` | The probe through the listener is TLS 1.3 with ALPN `h2`, and its SAN set, issuer, validity window and leaf sha256 match a live fetch of the destination. Transient live-fetch timeouts are retried; every required comparison must still pass. |
 | `E2E-03` | The layer4 upstream records a PROXY v2 header with the `0d0a0d0a` signature, version/command `0x21`, family `0x11`, a 12-byte IPv4 address block, the expected destination, and an intact ClientHello carrying the SNI. |
 | `E2E-04a` | A wrong UUID opens no tunnel; the client is still alive and the scoped client-or-server log names a handshake-class failure. |
 | `E2E-04b` | Same, with a wrong publicKey. |
 | `E2E-04c` | Same, with a wrong shortId. |
+| `E2E-05a` | A wrong naive credential for the test decoy name returns the hidden-page marker, never the target marker, and the counting target's byte count does not change. |
+| `E2E-05b` | The same three facts hold when no `Proxy-Authorization` is sent. |
+| `E2E-05c` | A correct credential cannot reach the private target: a GET sent inside the CONNECT stream produces no target marker and no counter change, and the scoped debug log carries `no allowed IP addresses` with status `403` in the item window. |
 
-The run ends with `E2E: PASS` only when all six items passed, and the closing
+The run ends with `E2E: PASS` only when all nine items passed, and the closing
 positive control (the passing client, re-run after the three controls) still
 returns the marker.
 
@@ -112,10 +133,12 @@ returns the marker.
 
 | File | Role |
 |---|---|
-| `run.sh` | preflight, overlay derivation, stack, the six items |
+| `run.sh` | preflight, overlay derivation, stack, the nine items |
 | `lib.sh` | `item`, `stop_pid`, `cleanup`, `port_busy`, `wait_records`, `require_env` |
 | `negative-controls.sh` | renders the three single-field client mutations |
 | `site-backend.py` | the site upstream and the tunnel's inner target |
+| `backend-counting.py` | loopback target that appends one JSON line per accepted request |
+| `naive-tunnel.py` | raw CONNECT probe for the decoy, missing credential, and private-target ACL cases |
 | `xray-server.tpl.json` | REALITY inbound template; no values |
 | `xray-client.tpl.json` | SOCKS + single VLESS outbound template; no values |
 | `probe-cert.py` | fetches and compares the presented certificate |

@@ -826,7 +826,7 @@ a **separate suite**: it does not add items to `scripts/verify.sh` (26 offline)
 or to `tests/coexist/` (CO-1..CO-8), so the frozen counts stay comparable with
 the `v0.4.3` evidence.
 
-It asserts six things on one run:
+It asserts nine things on one run:
 
 | Item | Subject |
 |---|---|
@@ -836,6 +836,9 @@ It asserts six things on one run:
 | `E2E-04a` | a wrong UUID opens no tunnel |
 | `E2E-04b` | a wrong publicKey opens no tunnel |
 | `E2E-04c` | a wrong shortId opens no tunnel |
+| `E2E-05a` | a wrong naive credential returns the decoy body, never the target marker, and the target counter does not change |
+| `E2E-05b` | the same three facts hold when no credential is sent |
+| `E2E-05c` | a correct credential cannot reach a private target: the counter stays unchanged and the Caddy log carries the `403 no allowed IP addresses` line |
 
 The Caddyfile under test is **derived** from `deploy/Caddyfile` by literal
 substitution, then reversed and diffed against the delivery file; a non-empty
@@ -854,12 +857,38 @@ workflow header says so.
 
 **Recorded run.** On 2026-11-07 the harness ran on the Linux test host with
 key material generated at runtime and the Caddy and Xray binaries supplied from
-the local machine. It exited 0 with `E2E-01` through `E2E-04c` and both
-positive controls passing. The Caddy binary was the go1.26.9 build with sha256
+the local machine. It exited 0 with all nine items and both positive controls
+passing. The Caddy binary was the go1.26.9 build with sha256
 `872caeee23f804fcb2991e26f3c7fe9526eb8a1d5003d4dedcc280c95d762f1d`;
 the Xray binary reported version 26.10.29. Raw logs stayed in the ignored
-`.gate/v050/e2e-run5/` directory; Phase 6 is responsible for scrubbing and
+`.gate/v050/e2e-p5-final2/` directory; Phase 6 is responsible for scrubbing and
 archiving them.
+
+The naive portion uses a loopback counting target on `18081`. The target is
+directly fetched once as a fixture self-check, and the counter is cleared
+before the proxy cases. Its JSONL record is the independent fact that separates
+a refused tunnel from a successful one; the CONNECT status alone is never used
+as the verdict. For the two decoy cases the test-only overlay substitutes
+`probe_resistance localhost`; the request names `localhost:18081`, so the
+forwardproxy branch serves its hidden page without dialing the target. If a
+regression opened a tunnel instead, that same name reaches the counting backend
+and the counter changes. The private-target case still uses `127.0.0.1:18081`,
+so it exercises the ACL rather than the probe-resistance branch.
+The private-target client sends a plain HTTP GET inside the CONNECT stream.
+When a scratch overlay added `acl { allow 127.0.0.1/32 }`, the counter changed
+from `0` to `1` and the target marker appeared, so `E2E-05c` failed on data as
+well as on the missing ACL log line. A separate decoy mutation changed the
+secret domain away from the target; `E2E-05a` and `E2E-05b` failed while the
+private-target item stayed green.
+The test overlay inserts the global `debug` directive, reversed during the diff,
+because forwardproxy returns the CONNECT `200` before its ACL lookup and Caddy
+records the later denial at debug level. The delivery file keeps its normal log
+level.
+
+The Xray readiness gate and the live-destination probes retry transient
+startup and network failures. A functional failure still ends red: `E2E-01`
+must satisfy every body, header and log condition on one attempt, and
+`E2E-02` must complete every certificate comparison after its retries.
 
 **It fails closed.** Every required variable is checked before a process
 starts, and a missing or empty value exits `2` naming it. `--negative-preflight`
@@ -867,6 +896,24 @@ proves that per variable, with no destination and no binary, by re-invoking the
 preflight with exactly one value removed or blanked. There is no skip outcome:
 a run that cannot obtain its inputs is a failure, not a pass.
 
-The input contract, the port plan (`8443`, `19099`, `18080`, `10802`) and the
+The input contract, the port plan (`8443`, `19099`, `18080`, `18081`, `10802`) and the
 list of what the harness does **not** prove are in `tests/e2e/README.md`; this
 section intentionally does not duplicate the variable list.
+
+## Fixture address and protocol guard
+
+`tests/fixtures/check.sh` is the machine-checked form of the F-01 fixture rule.
+It scans every `*.Caddyfile` under `tests/` and reads `deploy/Caddyfile`
+without modifying it. Each non-443 listener must have a site block using both
+address forms, for example `:8443, a.test:8443`, and must carry an explicit
+`protocols h1 h2` in that block or in the global `servers :8443` block that
+owns it. A host-specific auxiliary block on the same listener, such as the
+test's `b.test:8443` 404 block, may share the pinned listener but cannot
+satisfy the rule by itself. The rendered E2E overlay uses the global pin
+because it inherits that line from the delivery file.
+
+The delivery file's `:443, a.test` form is accepted: the second address
+inherits the first one's port, so the non-443 rule does not apply. The guard is
+invoked by both CI and the E2E preflight, and it is deliberately not added to
+`scripts/verify.sh`; the frozen counts remain 26 offline and eight
+coexistence items.
