@@ -9,7 +9,7 @@ stopped_at: v0.5.0 published; upstream watcher added and dry-run verified.
 last_updated: "2026-11-07T13:20:00.000Z"
 last_activity: 2026-11-07
 last_activity_desc: Added the daily upstream-drift watcher; dry run reports four components behind and opens nothing
-state_head: 2c894dfa88d109f9bac6a68110611cf7024aea8b
+state_head: d79fca68b3ef4287ae41f06eff4adc35b60b8553
 progress:
   total_phases: 3
   completed_phases: 3
@@ -121,6 +121,7 @@ affecting current work:
 - [Phase 6]: The published amd64 asset (`c780d1d6…`) is the binary the CI `offline` job built at the same commit, so the two suites gated exactly that hash. — CI reproduces the same bytes for the same inputs; the local test build differs (`872caeee…`), which is why the evidence index names both.
 - [Phase 6]: Executing the 53 MB release asset on `hw-gz` is deferred, not claimed. — The release CDN measured 5–35 KB/s from the authoring machine and about 19 KB/s from the test host.
 - [Phase 6 follow-up]: Upstream drift is **reported**, never auto-applied. — A new Caddy tag can break the read-idle-timeout patch and both forks need syncing, so a bump stays a reviewed change; the daily watcher opens one issue and does not build.
+- [Phase 6 follow-up]: `forwardproxy` is watched on its `naive` branch, not `master`. — The pin is a `naive` commit; master stopped in 2024 and diverged by a README-only edit, so a master comparison reported a permanent false positive.
 
 ### Pending Todos
 

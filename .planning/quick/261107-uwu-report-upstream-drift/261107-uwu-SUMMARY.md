@@ -5,7 +5,7 @@ description: "Report when a pinned input falls behind upstream"
 status: complete
 created: 2026-11-07
 completed: 2026-11-07
-commits: [b09cbd2, 2c894df]
+commits: [b09cbd2, 2c894df, d79fca6]
 ---
 
 # Quick Task Summary: Upstream drift report
@@ -34,7 +34,8 @@ components behind**
 
 Manual `workflow_dispatch` with `dry_run=true`, commit `2c894df`: success, no
 issue created. The first run printed `STALE components=4`, but one row was a
-false positive; the corrected report is below.
+false positive. The corrected report is
+<https://github.com/olst57/my-caddy/actions/runs/42375980478> on `d79fca6`.
 
 | Component | Pinned | Upstream | State |
 |---|---|---|---|
