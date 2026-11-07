@@ -34,7 +34,7 @@ recorded. It also does not rewrite the `v0.4.3` tag, assets, or evidence.
 Phase numbers continue from the previous milestone: `v0.4.3` ended at Phase 3,
 so `v0.5.0` starts at Phase 4.
 
-- [ ] **Phase 4: REALITY E2E harness** — Build `tests/e2e/` so a REALITY
+- [x] **Phase 4: REALITY E2E harness** (completed 2026-11-07) — Build `tests/e2e/` so a REALITY
   handshake, the masquerade certificate, PROXY v2, and the three negative
   controls run as assertions on `hw-gz`.
 - [ ] **Phase 5: naive/ACL assertions and fixture guards** — Upgrade the naive
@@ -67,12 +67,12 @@ silently break it.
   5. With key material removed from the environment, the run exits non-zero
      before any handshake, and prints which variable is missing.
   6. No real key, UUID, shortId, host, or address is added to the tree.
-**Plans**: 3 plans
+**Plans**: 3/3 plans complete
 
 Plans:
-- [ ] 04-01: Scaffold `tests/e2e/` from the coexist fixtures
-- [ ] 04-02: Implement the REALITY handshake, certificate, and PROXY v2 assertions
-- [ ] 04-03: Add the negative controls and the fail-closed key handling
+- [x] 04-01: Scaffold `tests/e2e/` from the coexist fixtures
+- [x] 04-02: Implement the REALITY handshake, certificate, and PROXY v2 assertions
+- [x] 04-03: Add the negative controls and the fail-closed key handling
 
 ### Phase 5: naive/ACL assertions and fixture guards
 **Goal:** Close the remaining assertion gaps the hand-run round exposed, and
@@ -128,7 +128,7 @@ Phases execute in numeric order: 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 4. REALITY E2E harness | 0/3 | Not started | - |
+| 4. REALITY E2E harness | 3/3 | Complete    | 2026-11-07 |
 | 5. naive/ACL assertions and fixture guards | 0/3 | Not started | - |
 | 6. Stability smoke, evidence, and release decision | 0/3 | Not started | - |
 

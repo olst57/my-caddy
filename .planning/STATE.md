@@ -2,19 +2,19 @@
 gsd_state_version: "1.0"
 milestone: v0.5.0
 milestone_name: REALITY closure and E2E regression harness
-current_phase: 4
-current_phase_name: REALITY E2E harness
+current_phase: 05
+current_phase_name: naive/ACL assertions and fixture guards
 status: executing
-stopped_at: v0.5.0 planned; Phase 4 ready to execute on the Linux host.
-last_updated: "2026-11-07T02:11:35.279Z"
+stopped_at: Phase 4 complete; Phase 5 ready to execute.
+last_updated: "2026-11-07T04:14:41.104Z"
 last_activity: 2026-11-07
-last_activity_desc: v0.5.0 phases 4-6 planned (9 plans)
-state_head: 5741b1993b1ebc7e0759f94a29de198a9f37740b
+last_activity_desc: Phase 4 complete, transitioned to Phase 05
+state_head: 2fb3e9707eb507c27374f60daf7017d66950c9be
 progress:
   total_phases: 3
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 9
-  completed_plans: 0
+  completed_plans: 3
 ---
 
 # Project State
@@ -32,27 +32,28 @@ read-only inputs.
 
 ## Current Position
 
-Phase: 4 (REALITY E2E harness) — READY TO EXECUTE
-Plan: 1 of 3 (04-01 scaffold)
+Phase: 05 — naive/ACL assertions and fixture guards
+Plan: Not started
 Status: Ready to execute
-Last activity: 2026-11-07 — v0.5.0 planning complete (9 plans)
+Last activity: 2026-11-07 — Phase 4 complete, transitioned to Phase 05
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed in `v0.5.0`: 0
+- Total plans completed in `v0.5.0`: 3
 - `v0.4.3` baseline: 8 plans, ~22 min average, ~3 h total
 
 **By Phase (`v0.5.0`):**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 4. REALITY E2E harness | 0 | 3 | — |
+| 4. REALITY E2E harness | 3 | 3 | — |
 | 5. naive/ACL assertions and fixture guards | 0 | 3 | — |
 | 6. Stability smoke, evidence, release decision | 0 | 3 | — |
 
 **Recent Trend:**
-- No `v0.5.0` plan has run yet; the `v0.4.3` trend was stable.
+- Phase 4 completed 3/3 in one session; the offline and coexistence suites
+  remain 26/26 and 8/8, and both CI workflows are green.
 
 *Updated after each plan completion.*
 
@@ -96,11 +97,14 @@ affecting current work:
 - The unknown-SNI/no-SNI posture is **undecided**; Phase 5 measures the
   baseline first and stops at a checkpoint until the owner picks one of
   default certificate, dedicated decoy, or reject.
+- [Phase 4]: The REALITY E2E harness is a separate fail-closed suite that derives its Caddyfile from deploy/Caddyfile and keeps the 26/8 frozen counts unchanged. — A green run must describe the delivery shape, not a hand-written fixture; the existing gates stay comparable.
+- [Phase 4]: Xray 26 needs a test-only finalRules loopback allow, and caddy-l4 writes the dialled destination into PROXY v2. — Both were measured on the Linux host; they make E2E-01 and E2E-03 deterministic without changing production configuration.
+- [Phase 4]: Negative controls get a 90-second budget and are classified against both client and server logs. — A wrong UUID can be rejected only after the client's REALITY retry loop exceeds the ordinary 25-second request budget.
 
 ### Pending Todos
 
-- Execute Phase 4 (04-01 → 04-03) on the Linux host; upload the Caddy and
-  Xray binaries from the local machine rather than downloading them there.
+- Execute Phase 5 (05-01 → 05-03) on the Linux host, with the Caddy and Xray
+  binaries uploaded from the local machine rather than downloaded there.
 - Phase 5 waits on the E2E-07 posture decision at its checkpoint.
 - Phase 6 publication waits on explicit owner approval.
 
@@ -136,7 +140,6 @@ affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-11-07
-Stopped at: v0.5.0 planning complete; Phase 4 ready to execute on the Linux
-host.
-Resume file: .planning/phases/04-reality-e2e-harness/04-01-PLAN.md
+Last session: 2026-11-07T04:14:40.943Z
+Stopped at: Phase 4 complete; Phase 5 ready to execute.
+Resume file: .planning/phases/05-naive-acl-assertions-and-fixture-guards/05-01-PLAN.md
