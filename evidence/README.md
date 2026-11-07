@@ -221,3 +221,16 @@ ARM64 资产不再只是“结构校验”。手动工作流 `verify-arm64-relea
 - UUID 形状：无
 - URL userinfo 形态：无
 - 键值凭据形态：无（S7-12 通过）
+
+### `v0.5.0` 发布资产（2026-11-07）
+
+| 资产 | 大小 | sha256 |
+|---|---:|---|
+| `caddy-linux-amd64` | 53,022,882 | `c780d1d63fa72b355f28ff7625968860dd9f36294ec884ca3b34920126bd04a8` |
+| `caddy-linux-arm64` | 49,414,306 | `8fcd7377649d9351ce0e7b2b42d9a890bcfc16cc0fd6a3d7e7ee1e16bf1c1b49` |
+| `SHA256SUMS` | 168 | `083f0c8310ccda5d7661c2a3789f68ec078c5cd06558b600f2bc57b833ee9f57` |
+| `pins.txt` | 267 | `677b2813466aa721d38a32d105e19c49f2ccba39abcd4d334deb8138040aed34` |
+
+- 三条独立读数一致：release API 的 asset digest、下载回来的 `SHA256SUMS`、以及 `verify` 工作流在 `d3c19c3` 上按固定输入构建的二进制，都是 `c780d1d6…`。
+- 该 CI 二进制正是两套门禁跑过的对象：`offline` 打印 `PASS=26 FAIL=0` 与 `VERIFY: PASS`，`coexist` 下载同一工件后打印 `ITEM CO-8 PASS` 与 `COEXIST: PASS`（run 42369088803）。发布构建 run 42370444867 的 `preflight`/`build`/`publish` 全部成功。
+- 53 MB 的 amd64 资产**没有**在本轮于 Linux 测试机执行：到发布 CDN 的速率在编写机约 5–35 KB/s、在测试机约 19 KB/s，传输需要数十分钟到数小时。本目录所有运行时数字来自本地构建的 `872caeee…`；在测试机上执行发布资产记为延期项，不作为已完成。

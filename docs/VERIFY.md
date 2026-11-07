@@ -991,10 +991,20 @@ CI on `c8bfe42` is green: `verify`
 workflow does not run on a push to `main`; it runs on the release event, so no
 `v0.5.0` artifact exists until a tag is created.
 
-**Decision status: pending the owner checkpoint (2026-11-07).** No `v0.5.0`
-tag exists and `v0.4.3` is untouched. The gate above is what the decision rests
-on; Task 3 of the phase plan is a blocking human-verify checkpoint, and a tag is
-created only after the owner answers `approved`.
+**Decision: published (2026-11-07), after the owner answered `approved`.** The
+annotated tag `v0.5.0` points at `d3c19c3`; the release is
+<https://github.com/olst57/my-caddy/releases/tag/v0.5.0> with four assets.
+`v0.4.3` is untouched at `b60f042`.
+
+The published amd64 asset is sha256
+`c780d1d63fa72b355f28ff7625968860dd9f36294ec884ca3b34920126bd04a8`. That is
+the hash the `offline` job built at this commit, printed `PASS=26 FAIL=0`, and
+the `coexist` job downloaded to print `COEXIST: PASS`; the release API digest
+and the `SHA256SUMS` asset agree. The runtime numbers in
+`evidence/v0.5.0/` come from the locally built go1.26.9 binary
+`872caeee…`, because the 53 MB asset was not downloaded to the test host at
+the measured 5–35 KB/s. Executing the published asset there is recorded as a
+deferred follow-up in `.planning/STATE.md`.
 
 ## Fixture address and protocol guard
 

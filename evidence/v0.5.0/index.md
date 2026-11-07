@@ -85,3 +85,33 @@ release evidence, only proof that the item is sensitive.
   derived from it by literal substitution and reversed before a listener
   starts.
 - `v0.4.3` was not moved, re-tagged, or rewritten.
+
+## Release asset
+
+The published `caddy-linux-amd64` asset for `v0.5.0` is sha256
+`c780d1d63fa72b355f28ff7625968860dd9f36294ec884ca3b34920126bd04a8`
+(53,022,882 bytes). Three independent reads agree on that value: the release
+API's asset digest, the downloaded `SHA256SUMS` asset, and the binary that the
+`verify` workflow built from the pinned inputs at `d3c19c3`.
+
+That CI binary is the one the two suites gated. The `offline` job printed
+`PASS=26 FAIL=0` and `VERIFY: PASS`; the `coexist` job downloads that same
+artifact before running `tests/coexist/run.sh`, which printed `ITEM CO-8 PASS`
+and `COEXIST: PASS` (run 42369088803). The release build is run 42370444867:
+its `preflight`, `build`, and `publish` jobs all succeeded and attached four
+assets. `pins.txt` in that release records `go_version=go1.26.9`,
+`forwardproxy_sha=e747854e…`, and `caddy_l4_sha=96e1a6bf…`.
+
+The arm64 asset is sha256
+`8fcd7377649d9351ce0e7b2b42d9a890bcfc16cc0fd6a3d7e7ee1e16bf1c1b49`.
+Like the amd64 asset it is a build artifact, not a rebuilt local tree; the
+arm64 execution claim belongs to `v0.4.3` and is not extended here.
+
+**What was not done.** The 53 MB amd64 asset was not executed on the Linux test
+host in this session. The route to the release CDN measured 5–35 KB/s from the
+authoring machine and about 19 KB/s from the test host, so the transfer would
+have taken tens of minutes to hours. Every runtime number in this directory
+comes from the locally built go1.26.9 binary sha256
+`872caeee23f804fcb2991e26f3c7fe9526eb8a1d5003d4dedcc280c95d762f1d`.
+Executing the published asset on the test host is recorded as a deferred
+follow-up, not as done.

@@ -4,17 +4,17 @@ milestone: v0.5.0
 milestone_name: REALITY closure and E2E regression harness
 current_phase: 06
 current_phase_name: Stability smoke, evidence, and release decision
-status: executing
-stopped_at: Phase 6 plans 06-01 and 06-02 complete; smoke and evidence recorded; release decision pending the owner checkpoint.
-last_updated: "2026-11-07T12:10:00.000Z"
+status: complete
+stopped_at: v0.5.0 published on 2026-11-07; Phase 6 3/3, milestone delivered, v0.4.3 untouched.
+last_updated: "2026-11-07T12:45:00.000Z"
 last_activity: 2026-11-07
-last_activity_desc: E2E-08 smoke and evidence/v0.5.0 recorded; CI and the Linux gate green on c8bfe42; publication awaits the owner
-state_head: c8bfe42f6a7c964aafaf14ad66fde639608c9d23
+last_activity_desc: Owner approved; v0.5.0 tagged on d3c19c3, release published with four assets, build and gates green
+state_head: d3c19c37df23e2e3e7a0b13941f0e658e1ee30c7
 progress:
   total_phases: 3
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 9
-  completed_plans: 8
+  completed_plans: 9
 ---
 
 # Project State
@@ -33,15 +33,15 @@ read-only inputs.
 ## Current Position
 
 Phase: 06 — Stability smoke, evidence, and release decision
-Plan: 06-03 — Re-run both suites and decide on publication (blocking owner
-checkpoint)
-Status: In progress — 06-01 and 06-02 complete; the decision is pending
-Last activity: 2026-11-07 — smoke and evidence measured; CI green on `c8bfe42`
+Plan: 06-03 — Re-run both suites and decide on publication
+Status: Complete — owner approved, `v0.5.0` tagged and published
+Last activity: 2026-11-07 — release 437547357 created; build run 42370444867
+success
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed in `v0.5.0`: 8
+- Total plans completed in `v0.5.0`: 9
 - `v0.4.3` baseline: 8 plans, ~22 min average, ~3 h total
 
 **By Phase (`v0.5.0`):**
@@ -50,17 +50,18 @@ Last activity: 2026-11-07 — smoke and evidence measured; CI green on `c8bfe42`
 |-------|-------|-------|----------|
 | 4. REALITY E2E harness | 3 | 3 | — |
 | 5. naive/ACL assertions and fixture guards | 3 | 3 | — |
-| 6. Stability smoke, evidence, release decision | 2 | 3 | — |
+| 6. Stability smoke, evidence, release decision | 3 | 3 | — |
 
 **Recent Trend:**
-- Phase 6 has two measured plans. E2E-08 runs 30 serial and 8 concurrent
-  requests on both legs with zero failures, and the upstream counters record
-  38/38. The redacted evidence set is `evidence/v0.5.0/`, archive hash
-  `35e1511a2c571fdb550be2f5cc02fb0c3873db058c891aaa78476a5cf1ddaf0b`.
-  CI `verify` and `gate0` are green on `c8bfe42`:
-  <https://github.com/olst57/my-caddy/actions/runs/42368473402> and
-  <https://github.com/olst57/my-caddy/actions/runs/42368473449>. The offline
-  suite is 26/26 and coexistence is 8/8 at that commit.
+- The milestone is delivered. E2E-08 ran 30 serial and 8 concurrent requests on
+  both legs with zero failures, the upstream counters recorded 38/38, and the
+  redacted evidence set is `evidence/v0.5.0/` (archive hash
+  `35e1511a2c571fdb550be2f5cc02fb0c3873db058c891aaa78476a5cf1ddaf0b`).
+  CI `verify` and `gate0` are green on `d3c19c3`:
+  <https://github.com/olst57/my-caddy/actions/runs/42369088803> and
+  <https://github.com/olst57/my-caddy/actions/runs/42369088807>. The annotated
+  tag `v0.5.0` points at that commit; release 437547357 has four assets and the
+  `build` workflow run 42370444867 succeeded.
 
 *Updated after each plan completion.*
 
@@ -116,13 +117,13 @@ affecting current work:
 - [Phase 6]: Each smoke request builds a complete client unit and nothing is retried. — A reused connection or a silent retry would hide the leak or race the item exists to expose.
 - [Phase 6]: The naive smoke target is `203.0.113.10:18082` bound to `lo`, not a loopback address. — The delivery ACL denies `127/8`, so a loopback target would have forced a test-only ACL edit and made E2E-08 describe something other than the delivery shape.
 - [Phase 6]: The archived E2E log is a line-selected excerpt of item, posture, control and verdict lines. — The full log carries a third-party certificate transcript, which is not evidence about this repository.
-- [Phase 6]: `v0.5.0` publication is a blocking owner checkpoint; no tag exists until it is answered. — The plan makes publication the owner's decision, and moving `v0.4.3` is forbidden either way.
+- [Phase 6]: `v0.5.0` publication was approved by the owner on 2026-11-07 and the annotated tag points at `d3c19c3`. — The plan makes publication the owner's decision; the approval is recorded in `ROADMAP.md` with the gate it rests on.
+- [Phase 6]: The published amd64 asset (`c780d1d6…`) is the binary the CI `offline` job built at the same commit, so the two suites gated exactly that hash. — CI reproduces the same bytes for the same inputs; the local test build differs (`872caeee…`), which is why the evidence index names both.
+- [Phase 6]: Executing the 53 MB release asset on `hw-gz` is deferred, not claimed. — The release CDN measured 5–35 KB/s from the authoring machine and about 19 KB/s from the test host.
 
 ### Pending Todos
 
-- Answer the Phase 6 owner checkpoint: `approved` creates the annotated
-  `v0.5.0` tag and lets the release build publish; `hold` records the hold and
-  leaves the milestone open.
+- None. The milestone is delivered; follow-ups are in Deferred Items.
 
 ### Blockers/Concerns
 
@@ -134,9 +135,9 @@ affecting current work:
   external input, not a fixture.
 - arm64 execution of `v0.5.0` is out of scope unless scheduled; the existing
   arm64 claim belongs to `v0.4.3`.
-- The `v0.5.0` tag is blocked on the owner checkpoint. Everything the decision
-  rests on is measured: 26/26, 8/8, 11/11 E2E, 30/30 and 8/8 smoke on both
-  legs, and green CI on `c8bfe42`.
+- The published amd64 asset was not executed on `hw-gz`. Its hash matches the
+  CI-built binary that both suites gated, but a runtime run on the release
+  artifact is still open; the CDN transfer was too slow to complete.
 
 ## Quick Tasks Completed
 
@@ -150,6 +151,7 @@ affecting current work:
 | Category | Item | Status | Deferred At | Milestone |
 |----------|------|--------|-------------|-----------|
 | Build | Byte-identical rebuilds | Open — inputs fixed, but `hw-gz` and CI produced different amd64 bytes | 2026-11-07 | post-v0.4.3 |
+| Release | Execute the published `v0.5.0` amd64 asset on `hw-gz` | Open — asset hash matches the CI-gated binary, but the 53 MB download measured 5–35 KB/s | 2026-11-07 | v0.5.0 follow-up |
 | Build | Pin `FWDPROXY_SHA` and `L4_SHA` to the release receipt | Closed — `pins/build-inputs.env` (`0ef98bb`) | 2026-11-06 | v0.4.3 follow-up |
 | Runtime | arm64 execution | Closed — released asset ran on `ubuntu-24.04-arm` (run 42228779590) | v0.4.2 | v0.4.3 follow-up |
 | Protocol | HTTP/3 on `:443` | Removed by design | 2026-11-04 | v0.4.3 |
@@ -157,9 +159,9 @@ affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-11-07T12:10:00.000Z
-Stopped at: Phase 6 plans 06-01 and 06-02 complete — E2E-08 measured, evidence
-archived, CI and the Linux gate green on `c8bfe42`. The publication decision is
-the blocking owner checkpoint.
-Resume file: .planning/phases/06-stability-smoke-evidence-and-release-decision/06-03-PLAN.md
+Last session: 2026-11-07T12:45:00.000Z
+Stopped at: `v0.5.0` published — annotated tag on `d3c19c3`, release 437547357
+with four assets, build run 42370444867 green, gate 26/26 and 8/8. Phase 6
+3/3; the milestone is complete.
+Resume file: .planning/phases/06-stability-smoke-evidence-and-release-decision/06-03-SUMMARY.md
 Previous: .planning/phases/06-stability-smoke-evidence-and-release-decision/06-02-SUMMARY.md
