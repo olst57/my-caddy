@@ -5,11 +5,11 @@ milestone_name: REALITY closure and E2E regression harness
 current_phase: 06
 current_phase_name: Stability smoke, evidence, and release decision
 status: complete
-stopped_at: v0.5.0 published on 2026-11-07; Phase 6 3/3, milestone delivered, v0.4.3 untouched.
-last_updated: "2026-11-07T12:45:00.000Z"
+stopped_at: v0.5.0 published; upstream watcher added and dry-run verified.
+last_updated: "2026-11-07T13:20:00.000Z"
 last_activity: 2026-11-07
-last_activity_desc: Owner approved; v0.5.0 tagged on d3c19c3, release published with four assets, build and gates green
-state_head: d3c19c37df23e2e3e7a0b13941f0e658e1ee30c7
+last_activity_desc: Added the daily upstream-drift watcher; dry run reports four components behind and opens nothing
+state_head: 2c894dfa88d109f9bac6a68110611cf7024aea8b
 progress:
   total_phases: 3
   completed_phases: 3
@@ -120,6 +120,7 @@ affecting current work:
 - [Phase 6]: `v0.5.0` publication was approved by the owner on 2026-11-07 and the annotated tag points at `d3c19c3`. — The plan makes publication the owner's decision; the approval is recorded in `ROADMAP.md` with the gate it rests on.
 - [Phase 6]: The published amd64 asset (`c780d1d6…`) is the binary the CI `offline` job built at the same commit, so the two suites gated exactly that hash. — CI reproduces the same bytes for the same inputs; the local test build differs (`872caeee…`), which is why the evidence index names both.
 - [Phase 6]: Executing the 53 MB release asset on `hw-gz` is deferred, not claimed. — The release CDN measured 5–35 KB/s from the authoring machine and about 19 KB/s from the test host.
+- [Phase 6 follow-up]: Upstream drift is **reported**, never auto-applied. — A new Caddy tag can break the read-idle-timeout patch and both forks need syncing, so a bump stays a reviewed change; the daily watcher opens one issue and does not build.
 
 ### Pending Todos
 
@@ -143,6 +144,7 @@ affecting current work:
 
 | # | Description | Date | Commit | Status | Directory |
 |---|-------------|------|--------|--------|-----------|
+| 261107-uwu | Report when a pinned input falls behind upstream | 2026-11-07 | 2c894df | complete | [261107-uwu-report-upstream-drift](./quick/261107-uwu-report-upstream-drift/) |
 | 261106-wsw | Pin Go 1.26.9 to match the official naiveproxy Caddy build | 2026-11-07 | decb4cf | complete | [261106-wsw-pin-go-1-26-9-to-match-naiveproxy-offici](./quick/261106-wsw-pin-go-1-26-9-to-match-naiveproxy-offici/) |
 | 261106-tfx | Close the v0.4.3 follow-ups: pin fork SHAs, execute arm64, conclude licenses | 2026-11-06 | db05ba0 | complete | [261106-tfx-close-v0-4-3-follow-ups-pin-fork-shas-ex](./quick/261106-tfx-close-v0-4-3-follow-ups-pin-fork-shas-ex/) |
 
@@ -159,9 +161,9 @@ affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-11-07T12:45:00.000Z
-Stopped at: `v0.5.0` published — annotated tag on `d3c19c3`, release 437547357
-with four assets, build run 42370444867 green, gate 26/26 and 8/8. Phase 6
-3/3; the milestone is complete.
+Last session: 2026-11-07T13:20:00.000Z
+Stopped at: `v0.5.0` published and the milestone closed; a daily upstream watcher
+was added afterwards and its dry run reports four components behind without
+opening an issue.
 Resume file: .planning/phases/06-stability-smoke-evidence-and-release-decision/06-03-SUMMARY.md
 Previous: .planning/phases/06-stability-smoke-evidence-and-release-decision/06-02-SUMMARY.md
