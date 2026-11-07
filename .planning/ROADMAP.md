@@ -40,9 +40,9 @@ so `v0.5.0` starts at Phase 4.
 - [x] **Phase 5: naive/ACL assertions and fixture guards** (completed 2026-11-07)
   — Upgrade the naive negative controls to body-and-log assertions, make the
   non-443 fixture shape machine-checked, and settle the unknown-SNI posture.
-- [ ] **Phase 6: Stability smoke, evidence, and release decision** — Run the
-  serial/concurrent smoke, capture and redact evidence, and decide whether to
-  publish `v0.5.0`.
+- [ ] **Phase 6: Stability smoke, evidence, and release decision** — In
+  progress: the smoke and the evidence set are done, and the publication
+  decision is waiting on the owner checkpoint.
 
 ## Phase Details
 
@@ -114,12 +114,16 @@ matches the run, and put the release decision in front of the owner.
      reports 8/8 after the harness is added.
   4. The release decision is written down; a tag is created only if the owner
      explicitly approves it.
-**Plans**: 3 plans
+**Plans**: 2/3 plans complete — the release decision is a blocking owner
+checkpoint, so the phase stays open until it is answered.
 
 Plans:
-- [ ] 06-01: Run the serial and concurrent smoke
-- [ ] 06-02: Capture, redact, and index the evidence
-- [ ] 06-03: Re-run both existing suites and decide on publication
+- [x] 06-01: Run the serial and concurrent smoke (E2E-08, 30/30 and 8/8 on
+  both legs, upstream 38/38)
+- [x] 06-02: Capture, redact, and index the evidence (`evidence/v0.5.0/`, five
+  files, archive hash `35e1511a…`)
+- [ ] 06-03: Re-run both existing suites and decide on publication — the
+  re-run and the CI record are done; the decision is pending
 
 ## Progress
 
@@ -130,7 +134,7 @@ Phases execute in numeric order: 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 4. REALITY E2E harness | 3/3 | Complete    | 2026-11-07 |
 | 5. naive/ACL assertions and fixture guards | 3/3 | Complete | 2026-11-07 |
-| 6. Stability smoke, evidence, and release decision | 0/3 | Not started | - |
+| 6. Stability smoke, evidence, and release decision | 2/3 | In progress — awaiting the release decision | - |
 
 ## Decision
 

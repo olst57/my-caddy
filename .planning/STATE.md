@@ -5,16 +5,16 @@ milestone_name: REALITY closure and E2E regression harness
 current_phase: 06
 current_phase_name: Stability smoke, evidence, and release decision
 status: executing
-stopped_at: Phase 5 complete; E2E-07 posture fixed to reject; CI green on ae5a6f8; Phase 6 starting.
-last_updated: "2026-11-07T00:00:00.000Z"
+stopped_at: Phase 6 plans 06-01 and 06-02 complete; smoke and evidence recorded; release decision pending the owner checkpoint.
+last_updated: "2026-11-07T12:10:00.000Z"
 last_activity: 2026-11-07
-last_activity_desc: Phase 5 closed with E2E-07 posture reject; CI green on ae5a6f8; Phase 6 starting
-state_head: ae5a6f8c1fbf0a505b2483d461d3d2a7962c12d8
+last_activity_desc: E2E-08 smoke and evidence/v0.5.0 recorded; CI and the Linux gate green on c8bfe42; publication awaits the owner
+state_head: c8bfe42f6a7c964aafaf14ad66fde639608c9d23
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 9
-  completed_plans: 6
+  completed_plans: 8
 ---
 
 # Project State
@@ -33,14 +33,15 @@ read-only inputs.
 ## Current Position
 
 Phase: 06 — Stability smoke, evidence, and release decision
-Plan: 06-01 — Serial and concurrent smoke (E2E-08)
-Status: In progress — Phase 5 is closed and Phase 6 has started
-Last activity: 2026-11-07 — E2E-07 asserted with the `reject` posture
+Plan: 06-03 — Re-run both suites and decide on publication (blocking owner
+checkpoint)
+Status: In progress — 06-01 and 06-02 complete; the decision is pending
+Last activity: 2026-11-07 — smoke and evidence measured; CI green on `c8bfe42`
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed in `v0.5.0`: 6
+- Total plans completed in `v0.5.0`: 8
 - `v0.4.3` baseline: 8 plans, ~22 min average, ~3 h total
 
 **By Phase (`v0.5.0`):**
@@ -49,14 +50,17 @@ Last activity: 2026-11-07 — E2E-07 asserted with the `reject` posture
 |-------|-------|-------|----------|
 | 4. REALITY E2E harness | 3 | 3 | — |
 | 5. naive/ACL assertions and fixture guards | 3 | 3 | — |
-| 6. Stability smoke, evidence, release decision | 0 | 3 | — |
+| 6. Stability smoke, evidence, release decision | 2 | 3 | — |
 
 **Recent Trend:**
-- Phase 5 is complete: the harness asserts ten items and prints
-  `E2E-07 POSTURE: reject`. The offline suite is 26/26 and coexistence is 8/8
-  on the same commit. CI `gate0` and `verify` are green on `ae5a6f8`:
-  <https://github.com/olst57/my-caddy/actions/runs/42365162459> and
-  <https://github.com/olst57/my-caddy/actions/runs/42365162477>.
+- Phase 6 has two measured plans. E2E-08 runs 30 serial and 8 concurrent
+  requests on both legs with zero failures, and the upstream counters record
+  38/38. The redacted evidence set is `evidence/v0.5.0/`, archive hash
+  `35e1511a2c571fdb550be2f5cc02fb0c3873db058c891aaa78476a5cf1ddaf0b`.
+  CI `verify` and `gate0` are green on `c8bfe42`:
+  <https://github.com/olst57/my-caddy/actions/runs/42368473402> and
+  <https://github.com/olst57/my-caddy/actions/runs/42368473449>. The offline
+  suite is 26/26 and coexistence is 8/8 at that commit.
 
 *Updated after each plan completion.*
 
@@ -109,12 +113,16 @@ affecting current work:
 - [Phase 5]: `socks_get` clears its per-attempt body, header, output and error files before each request. — An earlier closing-control run left a stale marker behind and could have made an empty reply look successful.
 - [Phase 5]: The unknown/empty/absent SNI baseline is **asserted**, not printed. — The posture decision is now `reject`, so a listener that starts presenting a certificate for an unmatched name turns E2E-07 red.
 - [Phase 5]: CI is green on the recorded commit `ae5a6f8`; the exact commit also re-ran 26/26 offline, 8/8 coexistence, and 10/10 E2E on `hw-gz`. — The CI status is evidence for the pushed tree, not a substitute for the Linux runtime checks.
+- [Phase 6]: Each smoke request builds a complete client unit and nothing is retried. — A reused connection or a silent retry would hide the leak or race the item exists to expose.
+- [Phase 6]: The naive smoke target is `203.0.113.10:18082` bound to `lo`, not a loopback address. — The delivery ACL denies `127/8`, so a loopback target would have forced a test-only ACL edit and made E2E-08 describe something other than the delivery shape.
+- [Phase 6]: The archived E2E log is a line-selected excerpt of item, posture, control and verdict lines. — The full log carries a third-party certificate transcript, which is not evidence about this repository.
+- [Phase 6]: `v0.5.0` publication is a blocking owner checkpoint; no tag exists until it is answered. — The plan makes publication the owner's decision, and moving `v0.4.3` is forbidden either way.
 
 ### Pending Todos
 
-- Execute Phase 6 after Phase 5 closes, with the Caddy and Xray binaries
-  uploaded from the local machine rather than downloaded there.
-- Phase 6 publication waits on explicit owner approval.
+- Answer the Phase 6 owner checkpoint: `approved` creates the annotated
+  `v0.5.0` tag and lets the release build publish; `hold` records the hold and
+  leaves the milestone open.
 
 ### Blockers/Concerns
 
@@ -126,6 +134,9 @@ affecting current work:
   external input, not a fixture.
 - arm64 execution of `v0.5.0` is out of scope unless scheduled; the existing
   arm64 claim belongs to `v0.4.3`.
+- The `v0.5.0` tag is blocked on the owner checkpoint. Everything the decision
+  rests on is measured: 26/26, 8/8, 11/11 E2E, 30/30 and 8/8 smoke on both
+  legs, and green CI on `c8bfe42`.
 
 ## Quick Tasks Completed
 
@@ -146,8 +157,9 @@ affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-11-07T00:00:00.000Z
-Stopped at: Phase 5 complete — E2E-07 asserted with the `reject` posture and CI
-green on `ae5a6f8`. Phase 6 has started.
-Resume file: .planning/phases/06-stability-smoke-evidence-and-release-decision/06-01-PLAN.md
-Previous: .planning/phases/05-naive-acl-assertions-and-fixture-guards/05-03-SUMMARY.md
+Last session: 2026-11-07T12:10:00.000Z
+Stopped at: Phase 6 plans 06-01 and 06-02 complete — E2E-08 measured, evidence
+archived, CI and the Linux gate green on `c8bfe42`. The publication decision is
+the blocking owner checkpoint.
+Resume file: .planning/phases/06-stability-smoke-evidence-and-release-decision/06-03-PLAN.md
+Previous: .planning/phases/06-stability-smoke-evidence-and-release-decision/06-02-SUMMARY.md

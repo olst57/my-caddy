@@ -963,6 +963,39 @@ The input contract, the port plan (`8443`, `19099`, `18080`, `18081`, `10802`) a
 list of what the harness does **not** prove are in `tests/e2e/README.md`; this
 section intentionally does not duplicate the variable list.
 
+## The `v0.5.0` candidate run
+
+Phase 6 measured the harness on the Linux test host and then on CI. The
+candidate commit is `c8bfe42`; the code it carries was already fixed at
+`2797575`, and the evidence commit adds only `evidence/v0.5.0/` and the index
+prose.
+
+| Check | Result |
+|---|---|
+| `scripts/verify.sh` | `PASS=26 FAIL=0`, `VERIFY: PASS` |
+| `tests/fixtures/check.sh` | `FIXTURES: PASS` (run by the E2E preflight) |
+| `tests/coexist/run.sh` | `ITEM CO-1`…`CO-8`, `COEXIST: PASS` |
+| `tests/e2e/run.sh` | 11 items, `E2E: PASS` |
+| smoke | 30/30 and 8/8 on both legs, upstream 38/38 |
+| binary | sha256 `872caeee23f804fcb2991e26f3c7fe9526eb8a1d5003d4dedcc280c95d762f1d` (go1.26.9 build) |
+
+The offline and coexistence suites were re-run on `c8bfe42` itself rather than
+carried over from `2797575`: both printed the same verdicts on the same
+binary, so the evidence commit does not move the gate. The E2E and smoke
+numbers come from the run archived in `evidence/v0.5.0/`, whose code is
+identical.
+
+CI on `c8bfe42` is green: `verify`
+<https://github.com/olst57/my-caddy/actions/runs/42368473402> and `gate0`
+<https://github.com/olst57/my-caddy/actions/runs/42368473449>. The `build`
+workflow does not run on a push to `main`; it runs on the release event, so no
+`v0.5.0` artifact exists until a tag is created.
+
+**Decision status: pending the owner checkpoint (2026-11-07).** No `v0.5.0`
+tag exists and `v0.4.3` is untouched. The gate above is what the decision rests
+on; Task 3 of the phase plan is a blocking human-verify checkpoint, and a tag is
+created only after the owner answers `approved`.
+
 ## Fixture address and protocol guard
 
 `tests/fixtures/check.sh` is the machine-checked form of the F-01 fixture rule.
