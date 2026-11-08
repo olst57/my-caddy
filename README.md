@@ -209,8 +209,8 @@ produces. The cost: no upstream fixes until the fork is synced.
 site-level `basic_auth` defect plus fork refs that resolved to live branch heads.
 `v0.4.3` removed the defect, pinned both fork commits, and added the arm64
 execution record. `v0.5.0` closed REALITY with the E2E harness and the redacted
-`evidence/v0.5.0/` capture set. Earlier tags are retired; the release notes in
-`.gate/release-notes-*.md` are the changelog, not this file.
+`evidence/v0.5.0/` capture set. Earlier tags are retired; the body of each
+release is the changelog, not this file.
 
 ## Built by an agent team
 

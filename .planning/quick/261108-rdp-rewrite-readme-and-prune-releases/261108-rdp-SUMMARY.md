@@ -5,7 +5,7 @@ description: "Rewrite the public README and converge the release set to v0.5.0 a
 status: complete
 created: 2026-11-08
 completed: 2026-11-08
-commits: [348734e]
+commits: [348734e, 0934f18]
 ---
 
 # Quick Task Summary: Rewrite the public README and prune the release set
@@ -187,7 +187,88 @@ constraint in mind.
 
 ## Remote Result
 
-REMOTE_RESULT_PLACEHOLDER
+All remote writes ran in one pass, in the order the plan fixed, and every step
+was read back before the next one started. Nothing was rejected.
+
+### 1. Six licence files attached to `v0.5.0`
+
+`gh release upload v0.5.0 … --clobber` added `LICENSE`,
+`Apache-2.0.txt`, `MIT.txt`, `BSD-3-Clause-Go.txt`, `MPL-2.0.txt` and the
+notice copy. The first attempt used the `gh` `#asset-name` rename syntax and
+landed the notice as `THIRD_PARTY_NOTICES-v0.5.0.md`; that asset was deleted and
+re-uploaded from a plain copy at `.gate/release/THIRD_PARTY_NOTICES.md`, so the
+name matches `v0.4.3` exactly. `gh release view v0.5.0 --json assets` now
+returns ten entries:
+
+```text
+Apache-2.0.txt            11358
+BSD-3-Clause-Go.txt        1453
+caddy-linux-amd64      53022882
+caddy-linux-arm64      49414306
+LICENSE                     585
+MIT.txt                    1091
+MPL-2.0.txt               16725
+pins.txt                    267
+SHA256SUMS                  168
+THIRD_PARTY_NOTICES.md     2669
+```
+
+`v0.4.3` still reports ten. Both binaries kept their published digests, so the
+upload did not disturb them: `caddy-linux-amd64`
+`c780d1d63fa72b355f28ff7625968860dd9f36294ec884ca3b34920126bd04a8`,
+`caddy-linux-arm64`
+`8fcd7377649d9351ce0e7b2b42d9a890bcfc16cc0fd6a3d7e7ee1e16bf1c1b49`.
+
+### 2. Two releases deleted, with their tags
+
+`gh release delete v0.4.2 --yes --cleanup-tag` and the same for `v0.4.1`
+succeeded; `gh release list` is down to `v0.5.0` and `v0.4.3`. Both bodies were
+saved to `.gate/release/release-body-v0.4.1.json` (1,195 bytes) and
+`.gate/release/release-body-v0.4.2.json` (732 bytes) before the deletion. The
+binaries are gone.
+
+### 3. Four tags and one branch deleted
+
+`git push origin --delete v0.2.0 v0.2.1 v0.3.0 v0.4.0 feat/protocol-pin`
+removed all five refs. Before the push, the branch's thirteen commits ahead of
+the merge base were captured with `git bundle create` at
+`.gate/release/feat-protocol-pin-6a18d30.bundle` (254,763 bytes);
+`git bundle verify` reports "The bundle records a complete history". The
+remote now holds exactly `refs/tags/v0.4.3`, `refs/tags/v0.5.0` and
+`refs/heads/main` at `0934f18`; local `git tag -d` removed the four matching
+tags plus the two that `--cleanup-tag` had already handled, leaving `v0.4.3`
+and `v0.5.0` locally as well.
+
+### 4. CI on the pushed head
+
+Push `0934f18` started three workflows, all `success`:
+
+```text
+42493399191  build   success
+42493399316  verify  success   offline PASS=26 FAIL=0, coexist success
+42493399480  gate0   success   pins, a1, a1c, a2, a3, stitch, gate-summary
+```
+
+`ITEM S7-18 PASS` appears in the `verify` log, so the new `v0.4.3` baseline
+holds in CI, and `ITEM S7-13 PASS` confirms the allowlist still reconciles in
+both directions after the deletions and the new prose.
+
+### 5. Remote state after the prune
+
+| Ref kind | Count | Names |
+| --- | --- | --- |
+| Releases | 2 | `v0.5.0` (10 assets), `v0.4.3` (10 assets) |
+| Tags | 2 | `v0.4.3`, `v0.5.0` |
+| Branches | 1 | `main` |
+
+`feat/protocol-pin` no longer exists on the remote. Its unmerged commits remain
+reachable locally on the branch and inside the bundle above, but the remote
+reference is gone.
+
+The prune is recorded in three commits: `348734e` is the tree change, `0934f18`
+is the local bookkeeping commit, and the commit that carries this section is the
+one that reports the remote result. Its own hash is deliberately not written
+here, because amending this file would invalidate it.
 
 ## Deliberately Not Done
 

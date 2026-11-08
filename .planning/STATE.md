@@ -5,10 +5,10 @@ milestone_name: REALITY closure and E2E regression harness
 current_phase: 06
 current_phase_name: Stability smoke, evidence, and release decision
 status: complete
-stopped_at: README rewritten for v0.5.0 and the release set cut to v0.5.0 plus v0.4.3.
-last_updated: "2026-11-08T15:05:00.000Z"
+stopped_at: README rewritten for v0.5.0, the release set cut to v0.5.0 plus v0.4.3, and the prune executed on the remote.
+last_updated: "2026-11-08T16:10:00.000Z"
 last_activity: 2026-11-08
-last_activity_desc: Rewrote the public README, moved the S7-18 baseline to v0.4.3, and pruned six tags and two releases
+last_activity_desc: Rewrote the public README, moved the S7-18 baseline to v0.4.3, and pruned six tags, two releases, and one branch on the remote
 state_head: 348734efa7ff80b78647b0408828b0e7f49aabe5
 progress:
   total_phases: 3
@@ -35,8 +35,8 @@ read-only inputs.
 Phase: 06 — Stability smoke, evidence, and release decision
 Plan: 06-03 — Re-run both suites and decide on publication
 Status: Complete — owner approved, `v0.5.0` tagged and published
-Last activity: 2026-11-08 — README rewritten for `v0.5.0`; the release set is
-now `v0.5.0` and `v0.4.3` only
+Last activity: 2026-11-08 — README rewritten for `v0.5.0`; the remote now
+carries two releases (`v0.5.0`, `v0.4.3`), two tags and `main` only
 
 ## Performance Metrics
 
@@ -146,7 +146,7 @@ affecting current work:
 
 | # | Description | Date | Commit | Status | Directory |
 |---|-------------|------|--------|--------|-----------|
-| 261108-rdp | Rewrite the public README and converge the release set to v0.5.0 and v0.4.3 | 2026-11-08 | 348734e | complete | [261108-rdp-rewrite-readme-and-prune-releases](./quick/261108-rdp-rewrite-readme-and-prune-releases/) |
+| 261108-rdp | Rewrite the public README and converge the release set to v0.5.0 and v0.4.3 | 2026-11-08 | 348734e, 0934f18 | complete | [261108-rdp-rewrite-readme-and-prune-releases](./quick/261108-rdp-rewrite-readme-and-prune-releases/) |
 | 261107-fksync | Fast-forward the module forks without moving a pin | 2026-11-07 | 9b73137 | complete | [261107-fksync-sync-module-forks](./quick/261107-fksync-sync-module-forks/) |
 | 261107-uwu | Report when a pinned input falls behind upstream | 2026-11-07 | 2c894df | complete | [261107-uwu-report-upstream-drift](./quick/261107-uwu-report-upstream-drift/) |
 | 261106-wsw | Pin Go 1.26.9 to match the official naiveproxy Caddy build | 2026-11-07 | decb4cf | complete | [261106-wsw-pin-go-1-26-9-to-match-naiveproxy-offici](./quick/261106-wsw-pin-go-1-26-9-to-match-naiveproxy-offici/) |
