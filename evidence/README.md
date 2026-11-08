@@ -17,10 +17,12 @@
 - 幂等：同一输入连跑两次，`diff -r` 为空，sha256 汇总一致
   （`6ee84e2e2148408536552a4284707cb2150f821ff2a8b9af4e17661462a9f878`）
 
-## 索引（23 个必发文件，逐条）
+## 索引（23 个必发文件，已归档到 `v0.5.0`）
 
-行数列为**本目录副本的行数**；每个都与 `.gate/release/` 原件相等（已在
-`.gate/release/SP7-EVIDENCE.md` 的 §B.6-4 中逐条比对）。
+这 23 个文件曾作为本目录的顶层副本存在，描述的是 `v0.5.0` 之前的那几轮抓取。它们逐字节
+留在 `v0.5.0` 的树里，工作树不再重复存放一份，取回方式是
+`git show v0.5.0:evidence/<文件名>`。下表保留当时的索引，行数列为副本行数，每个都与
+`.gate/release/` 原件相等（已在 `.gate/release/SP7-EVIDENCE.md` 的 §B.6-4 中逐条比对）。
 
 | # | 文件 | 行数 | 用途 |
 |---|------|------|------|
@@ -48,11 +50,14 @@
 | 22 | `adapted.json` | 1 | 适配后的 Caddy 配置 JSON；凭据字段已脱敏为 `"auth_credentials":["<NAIVE_CREDENTIALS>"]` |
 | 23 | `adapt.err` | 0 | 适配步骤的 stderr 捕获，**0 字节**（见下节） |
 
-索引文件自身也在此目录：`README.md`（本文件），不计入 23 个必发项。
+索引文件自身仍是本目录的 `README.md`（本文件），不计入这 23 个文件。
 
 ## 已知失真：`SP4-D4.txt:14` 的命令
 
-`SP4-D4.txt` 第 14 行是一条 `grep … 'basic_auth …' | awk …` 管道命令。脱敏后命令中的模式字段已被替换，原命令以 `.gate/release/` 原件为准；该行引号已不配对，不能直接重跑。本轮不修归档内容本身（修它就不再是「副本」）。
+`git show v0.5.0:evidence/SP4-D4.txt` 的第 14 行是一条
+`grep … 'basic_auth …' | awk …` 管道命令。脱敏后命令中的模式字段已被替换，原命令以
+`.gate/release/` 原件为准；该行引号已不配对，不能直接重跑。归档内容本身不修
+（修它就不再是「副本」）。
 
 ## SP1／SP2／SP3：无留存产物
 
@@ -77,7 +82,8 @@
 <适配命令> > adapted.json 2> adapt.err
 ```
 
-`evidence/adapt.err` 与 `.gate/release/adapt.err` 同为 0 字节，行数一致（0 = 0）。
+`git show v0.5.0:evidence/adapt.err` 与 `.gate/release/adapt.err` 同为 0 字节，
+行数一致（0 = 0）。
 
 ## 条件发布：三个冲刺总结未发布
 
@@ -104,7 +110,9 @@ grep -nE '([0-9]{1,3}\.){3}[0-9]{1,3}' .gate/release/SPRINT4-SUMMARY.md .gate/re
 
 ## 已知限制：该字符串为普通词，非凭据
 
-`evidence/SP4-D1.txt:95`、`evidence/SP6-F2.txt:8`、`evidence/SP6-F5.txt:43` 三处出现同一个小写英文单词：`:95` 落在 Caddy 安装本地 CA 的固定提示语里，`:8` 是原件自带的尖括号指代形态，`:43` 是 diff 注释里的普通叙述词。**该字符串为普通词，非凭据。**
+`v0.5.0:evidence/SP4-D1.txt:95`、`SP6-F2.txt:8`、`SP6-F5.txt:43` 三处出现同一个小写
+英文单词：`:95` 落在 Caddy 安装本地 CA 的固定提示语里，`:8` 是原件自带的尖括号指代形态，
+`:43` 是 diff 注释里的普通叙述词。**该字符串为普通词，非凭据。**
 
 依据是它被编译进 Caddy 自身：`dist/caddy-linux-amd64` 与 `dist/caddy-linux-arm64` 各命中 52 次，且出现在 Caddy 的提示串中（如 `(you might be prompted for …)`、`The … to hash`、`username and … cannot be empty`）。每轮运行的口令不会出现在厂商二进制的字符串表里，更不会两个架构命中数完全相同。三处的 `od -c` 原始字节与逐处定性见 `.gate/release/F9-REPORT.md` 的 F-10 一节。
 
@@ -159,8 +167,9 @@ grep -nE '([0-9]{1,3}\.){3}[0-9]{1,3}' .gate/release/SPRINT4-SUMMARY.md .gate/re
 该分支头在两次构建之间从 `f607ccea…` 前进到 `96e1a6bf…`，因此发布件的 sha256 是
 `693057c2f596e163144eb0d2991bd4c8b19cadb351199cb8cc87b183647618f2`。
 
-按“证据必须描述被发布的那个对象”的原则，两个套件已用**下载回来的 release 资产**在 `hw-gz`
-重跑：`PASS=26 FAIL=0`、`CO-1..CO-8 PASS`。本目录的副本即这一次采集，commit 为 `b60f042`。
+按“证据必须描述被发布的那个对象”的原则，两个套件已用**下载回来的 release 资产**在
+the Linux test host 重跑：`PASS=26 FAIL=0`、`CO-1..CO-8 PASS`。本目录的副本即这一次采集，
+commit 为 `b60f042`。
 该漂移已记入 `docs/BUILD.md` 的 fork-ref 说明与本轮小结；随后在 `pins/build-inputs.env`
 中钉死两个 fork 的提交，并用一次真实 CI 构建确认产物哈希仍为 `693057c2…618f2`。
 

@@ -1,236 +1,240 @@
 # my-caddy
 
-This repository is the build recipe for a personal, self-hosted Caddy binary:
-one binary that fills three roles at once, all of them on port 443. It is not a
-collection of Caddyfile fragments, and it is not a distribution. The sections
-below cover where the code comes from, how the binary is assembled and checked,
-how to obtain it, and what this document does not claim.
+One Caddy binary that fills three roles on a single port: a site reverse proxy,
+an in-process naive proxy, and an SNI-routed REALITY/Vision passthrough. All
+three share `:443`. This repository is the build recipe and the verification
+harness for that binary — not a Caddyfile collection, and not a distribution.
 
-## Caddy base
+The current baseline is `v0.5.0`.
 
-The Caddy core is `github.com/caddyserver/caddy` at tag `v2.11.7`. That tag is
-the baseline for everything downstream: the module sources, the patch, and the
-four module assertions are all stated against it. This document does not
-restate Caddy's configuration language; `deploy/` and `docs/` are the
-authoritative places for that.
+## Should you use this?
 
-## The two modules and their forks
+It fits if you want one process and one port to serve a website, a naive
+endpoint, and a REALITY tunnel, and you are willing to run a small verification
+suite before you trust a build.
 
-The binary carries two modules that are not part of Caddy core. Each one reaches
-this repository through a fork, so both sides of the pair are written out here.
+It does not fit if you want a general-purpose Caddy module set, a container
+image, Windows or macOS binaries, or a configuration you can drop in without
+reading `deploy/PLACEHOLDERS.md` first. None are in scope here.
 
-- naive forward proxy: the upstream is the `naive` branch of
-  `github.com/klzgrad/forwardproxy`; this project builds the `naive` branch of
-  `github.com/olst57/forwardproxy`.
-- Layer 4: the upstream is the `master` branch of
-  `github.com/mholt/caddy-l4`; this project builds the `master` branch of
-  `github.com/olst57/caddy-l4`.
+## Sixty seconds
 
-The import path stays the upstream one, so the module identity does not change
-when the source moves to a fork. How each module is configured belongs to
-`docs/XRAY.md` and `deploy/`, not here.
+1. Download `caddy-linux-amd64`, `caddy-linux-arm64`, `SHA256SUMS` and
+   `pins.txt` from the release page. The six license and notice files there are
+   not listed in `SHA256SUMS`.
+2. From the directory that holds the downloads, run `sha256sum -c SHA256SUMS`.
+   The file names are bare, so a check run elsewhere reports a failure.
+3. Point `CADDY_BIN` at the binary and run `bash scripts/verify.sh`. It reads
+   the delivery configs and needs no root, no network, and no running stack.
 
-## Build toolchain and Go
+Deploying is a separate step and starts with `deploy/PLACEHOLDERS.md`.
 
-The binary is assembled by `github.com/caddyserver/xcaddy` at `v0.4.7`, and Go
-is fixed at `1.26.9`. Both are concrete values in
-`pins/build-inputs.env`, not ranges. The Go value is copied into the four
-workflows that call `setup-go`, and `tests/pins/check.sh` fails if any copy
-drifts from the pins file.
+## The three roles
 
-The patch level is measured, not guessed. The official naiveproxy Caddy release
-`v2.11.7-naive2` reports `go1.26.9` in the Go build metadata embedded in its
-published `caddy` binary. The `v0.4.3` build here predates this pin and reports
-`go1.26.10` in its receipt and evidence; those historical records are not
-rewritten.
+**Site reverse proxy.** Ordinary web traffic is reverse proxied to a local
+backend over HTTP/1.1 and HTTP/2 only. The delivery config pins `protocols h1
+h2` on `:443`, so no QUIC listener is created and no `Alt-Svc` is advertised.
+HTTP/3 is deliberately off: one SNI with two transport identities on one port is
+the coexistence hazard this deployment exists to avoid.
 
-`scripts/check-upstream.sh` and the daily `upstream-watch` workflow report when
-a pin falls behind its upstream (Caddy, `xcaddy`, both forks, and Go). They only
-open or update one issue; they never edit the pins or start a build, because a
-bump needs a fork sync, a patch check, and a full gate run.
+**naive proxy.** The site block carries `forward_proxy`, which serves `https://`
+entry points over H2 under the same pin. `probe_resistance` is enabled, so an
+unauthenticated CONNECT is not answered with `407`; it falls through to the site
+handler as an ordinary request. What tells you authentication worked is whether
+a tunnel was established, not the status code.
 
-The module forks are kept current separately: `scripts/check-forks.sh` and the
-daily `fork-sync` workflow fast-forward them from upstream when a
-`FORK_SYNC_TOKEN` secret is configured, and otherwise report. A sync never
-moves a pin, so it cannot change the binary by itself.
+**REALITY and Vision.** The `layer4` listener wrapper reads the raw ClientHello
+and routes on SNI to a loopback listener, prefixing the connection with PROXY
+protocol v2. Caddy does no local decryption on that path; the tunnel endpoint
+does the TLS work. The wrapper is declared before `tls` for that reason — the
+order is semantic, not cosmetic.
 
-## The single patch, and why it is mandatory
+The global `order forward_proxy before reverse_proxy` line is equally
+load-bearing. Without it `caddy adapt` still exits 0, but the site handler
+answers first and swallows every request, so no CONNECT ever reaches
+`forward_proxy` and naive is dead silently. `scripts/verify.sh` item `S3-9`
+asserts the resulting order.
 
-`patches/caddy-read-idle-timeout.patch` is the only patch here, and the build
-refuses to start if `patches/` holds more than one `.patch` file: the
-repository must hold only one .patch, and a second one is a scope violation
-rather than a convenience.
+## Pinned inputs
 
-The reason it is mandatory is causal, not stylistic. The naive branch calls
+Everything the build consumes is a concrete value in `pins/build-inputs.env`,
+never a branch head and never a range.
+
+| Input | Pin |
+| --- | --- |
+| Caddy core | tag `v2.11.7` |
+| naive forward proxy | fork of `klzgrad/forwardproxy`, `naive` branch |
+| Layer 4 | fork of `mholt/caddy-l4`, `master` branch |
+| xcaddy | `v0.4.7` |
+| Go | `1.26.9` |
+| Xray (probe only) | `v26.10.31` |
+
+The import paths stay the upstream ones, so a fork does not change module
+identity. The two forks are the only forks: Caddy core is consumed as a tag plus
+the patch below, and xcaddy and Go are consumed as released tools. Forking
+either of those would buy nothing and cost a sync obligation.
+
+The Go pin is measured, not guessed: the official naiveproxy Caddy release
+`v2.11.7-naive2` reports `go1.26.9` in the build metadata embedded in its
+published binary. The `v0.4.3` build predates that pin and reports `go1.26.10`;
+its receipt is a historical record and is not rewritten.
+
+`tests/pins/check.sh` fails if any copy of a pin drifts from this file,
+including the copies inside the workflows that call `setup-go`.
+
+## The one patch
+
+`patches/caddy-read-idle-timeout.patch` is the only patch here; the build
+refuses to start if `patches/` holds a second `.patch` file.
+
+It is mandatory for a causal reason. The naive branch calls
 `caddyhttp.IdleTimeoutsFromContext` from `forwardproxy.go`, and that symbol does
-not exist in Caddy `v2.11.7`. The patch adds it. On its own the patch is not
-enough either, because xcaddy would still compile the module against the
-unpatched tag; the build also passes `--replace` so the Caddy module is taken
-from the local patched tree. Both are therefore required, and the build does
-not compile with only one of them. The build line printed by the upstream naive
-README contains neither the patch nor the replace, so copying it as written
-does not compile.
-
-## Why the forks are ours, and what that costs
-
-This is a design decision, not an accident. The build used to resolve commit
-ids straight from the upstream `refs/heads`, which tied the artifacts to
-somebody else's branch heads: the `v0.4.0` and `v0.4.1` binaries differ only
-because a caddy-l4 branch head moved, with no commit landing in this repository
-at all. The forks cut that link. Moving to a newer upstream is now the explicit
-act of syncing a fork, and no upstream push can change what this repository
-produces.
-
-The cost is stated plainly: there are no upstream fixes until you sync the fork.
-A fork that is never synced is a fork that slowly falls behind.
+not exist in Caddy `v2.11.7`. The patch adds it, and the build also passes
+`--replace` so the Caddy module comes from the patched tree rather than the
+unpatched tag. The build line in the upstream naive README has neither, so
+copying it as written does not compile.
 
 ## Build triggers
 
-`.github/workflows/build.yml` has three inputs.
+`.github/workflows/build.yml` watches five paths on `main`: `scripts/**`,
+`patches/**`, `pins/**`, `tests/pins/**`, and the workflow file itself. A push
+touching any of them builds the artifacts without uploading them. A published
+release builds and attaches them. `workflow_dispatch` builds without uploading.
 
-- A push to `main` whose changed paths fall under `scripts/**`, `patches/**`,
-  or the workflow file itself: the artifacts are built but do not upload.
-- A published release: the artifacts are built and attached to the release.
-- A manual `workflow_dispatch`: the artifacts are built and are not uploaded.
+Syncing a fork triggers nothing — it lands outside those paths — so run the
+build by hand afterwards.
 
-Syncing a fork does not trigger a build, because a sync lands outside those
-paths. After a sync, run the build again by hand.
+## Verification, in three tiers
 
-## Artifacts and the module assertion
+**Offline, 26 items.** `scripts/verify.sh` reads the delivery configs and the
+repository's own invariants: the adapter output, the handler order, the
+credential positions, the pin copies, the license set, and the `deploy/` freeze.
+It needs `CADDY_BIN` and `jq`, and nothing else. CI runs it on every push.
 
-Every build asserts that the binary carries four modules:
-`http.handlers.forward_proxy`, `layer4.handlers.proxy`, `caddy.listeners.layer4`,
-and `layer4.matchers.quic`. A binary that is missing any one of them fails the
-build instead of shipping.
+**Coexistence, 8 items.** `tests/coexist/run.sh` starts the real binary on `:443`
+and asserts each role with a control next to every assertion: `CO-1` site leg,
+`CO-2` REALITY leg with a PROXY v2 record at the stub, `CO-3` unknown SNI
+claimed by nobody, `CO-4` naive tunnel over HTTP/1.1, `CO-5` decoy control,
+`CO-6` the same naive hop over HTTP/2, `CO-7` no QUIC listener on UDP `:443`,
+`CO-8` decoy and target are disjoint. It needs root and one external TLS
+endpoint, because the delivery ACL refuses loopback targets.
 
-Four assets come out of a run: `caddy-linux-amd64`, `caddy-linux-arm64`,
-`SHA256SUMS`, and `pins.txt`. Sizes and checksums are not repeated here, because
-they change with every build.
+**End to end, 11 items.** `tests/e2e/run.sh` runs eleven assertions across
+`E2E-01`–`E2E-08`: the Vision tunnel, the destination certificate on an
+unauthenticated probe, the PROXY v2 header, three wrong-credential controls for
+REALITY, three for naive (including the private-target ACL denial), SNI
+rejection, and 30 serial plus 8 concurrent requests through each leg.
+`E2E-06`, the non-443 address-shape guard, lives in `tests/fixtures/check.sh`.
+The suite derives its Caddyfile from `deploy/Caddyfile` by literal substitution
+and reverse-diffs the derivation before starting anything. It needs root, ports
+`8443`, `19099`, `18080`, `18081`, `18082` and `10802`, a real destination, and
+key material that must not be committed.
 
-## What pins.txt records
+CI syntax-checks the E2E harness and runs its fail-closed `--negative-preflight`
+mode, which starts no process. **CI does not execute the E2E suite.**
 
-`pins.txt` is the audit trail of a run: what it consumed, not what was
-intended. It holds seven fields, each written as a `name=value` line.
+### What execution coverage is claimed
 
-- `caddy_tag=`: the Caddy tag that was built.
-- `caddy_source_head=`: the Caddy commit the source tree was cloned at.
-- `forwardproxy_sha=`: the forward proxy commit that was used.
-- `caddy_l4_sha=`: the Layer 4 commit that was used.
-- `xcaddy_version=`: the xcaddy tag that was installed.
-- `go_version=`: the Go toolchain the run reported.
-- `patch=`: the patch file that was applied.
+The `v0.4.3` amd64 asset ran the 26-item gate and the 8-item suite on the Linux
+test host and in CI; its arm64 asset ran both on a GitHub-hosted
+`ubuntu-24.04-arm` runner, recorded in `evidence/v0.4.3/arm64-release.log`.
 
+The `v0.5.0` amd64 asset has **not** been executed on the Linux test host: the
+download from the release CDN ran at roughly 19 KB/s there, so the 53 MB asset
+was deferred rather than half-transferred. The runtime numbers in
+`evidence/v0.5.0/` come from a locally built binary with the same pinned inputs,
+and the `v0.5.0` arm64 asset was not executed at all. Neither gap is upgraded to
+"verified" by this document.
+
+Executing an arm64 artifact is not the same as rebuilding it byte for byte.
+
+## Release assets
+
+A build produces four files: `caddy-linux-amd64`, `caddy-linux-arm64`,
+`SHA256SUMS` and `pins.txt`. A release carries those four plus `LICENSE`,
+`THIRD_PARTY_NOTICES.md`, `Apache-2.0.txt`, `MIT.txt`, `BSD-3-Clause-Go.txt` and
+`MPL-2.0.txt` — ten assets. Both `v0.5.0` and `v0.4.3` carry the full set.
+Sizes and checksums are not repeated here; `SHA256SUMS` is the authority.
+
+`pins.txt` is the audit trail of a run: what it consumed, not what was intended.
+It holds seven `name=value` lines — `caddy_tag`, `caddy_source_head`,
+`forwardproxy_sha`, `caddy_l4_sha`, `xcaddy_version`, `go_version` and `patch`.
 To audit a build, read this file first. The two fork commits and the xcaddy
-version in it can be passed back to the build as `FWDPROXY_SHA`, `L4_SHA` and
-`XCADDY_VERSION` to replay the same inputs.
+version can be passed back as `FWDPROXY_SHA`, `L4_SHA` and `XCADDY_VERSION` to
+replay the same inputs.
 
-## How the binary is verified
+## Operating the delivery config
 
-Both architectures are executed. `caddy-linux-amd64` runs the 26-item offline
-gate and the 8-item coexistence suite on `hw-gz` and in CI. The arm64 artifact
-is executed by the manual `verify-arm64-release` workflow on a GitHub-hosted
-`ubuntu-24.04-arm` runner: it downloads the published asset, checks the
-recorded sha256 before execution, and then runs the same 26 + 8 items. The
-`v0.4.3` run is
-<https://github.com/olst57/my-caddy/actions/runs/42228779590>; the extracted
-record is `evidence/v0.4.3/arm64-release.log`.
+`deploy/` is the only authoritative configuration in this repository. `docs/`
+explains it; nothing else overrides it. Two properties there are easy to get
+wrong in a way that still validates, so they are stated here.
 
-Executing the arm64 artifact is not the same as rebuilding it byte-for-byte.
-The reproducibility limit below still applies to both architectures.
+**`tls internal` is a placeholder posture.** It makes Caddy issue certificates
+from its own local CA so the skeleton validates and the structure is testable
+offline, not a production posture. Before deployment, replace it with an ACME
+issuer or an explicitly managed certificate. Caddy's internal CA leaves the
+subject DN empty, so certificate assertions must read the SAN, never the subject.
 
-## One binary, three roles on 443
+**There is deliberately no site-level `basic_auth`.** naive authenticates the
+CONNECT itself, through `forward_proxy`'s own `basic_auth`, which reads
+`Proxy-Authorization`. Its credentials are base64 `user:pass`, not bcrypt, and
+they are a separate list from any site credential. A site-level `basic_auth` is
+forbidden: it runs before `forward_proxy` and answers `401` to every request, so
+the site serves nothing and no CONNECT can authenticate. An earlier release
+carried exactly that defect.
 
-One binary answers on port 443 in three roles.
+Do not add an `upstream` sub-directive to `forward_proxy`: setting one silently
+disables `acl` and `ports`, which removes the default private-network deny.
 
-**Site reverse proxy.** Ordinary web traffic is reverse proxied to a local site,
-over HTTP/1.1 and HTTP/2 only. The delivery config pins `protocols h1 h2` on
-`:443`, so no QUIC listener is created and no `Alt-Svc` is advertised. HTTP/3
-was measured on this path before that pin landed; it is deliberately off now,
-because one SNI with two transport identities on one port is the coexistence
-hazard this deployment avoids.
+## Keeping up with upstream
 
-**naive proxy.** This role serves `https://` entry points, and with the pin
-above those run over H2. `quic://` was measured before the pin and is no longer
-offered, since it needs the same H3 surface the site role gives up. `basic_auth`
-is in force, and `probe_resistance` is enabled. Because of `probe_resistance`,
-an unauthenticated CONNECT is not answered with `407`; it falls through to the
-site handler as an ordinary request. What tells you whether authentication
-worked is whether a tunnel was established, not the status code.
+Two scheduled workflows watch the outside world. Neither one changes what this
+repository builds.
 
-**REALITY and Vision.** The layer 4 handler routes on SNI to a loopback
-listener and prefixes the connection with PROXY protocol v2. Caddy does no local
-decryption on that path; the tunnel endpoint does the TLS work. An end to end
-request through it was measured at `200`.
+`scripts/check-upstream.sh` and `upstream-watch.yml` (daily) compare every pin
+against its upstream and open or update one issue when something moved. They
+never edit `pins/build-inputs.env` and never start a build: a bump needs a fork
+sync, a patch check and a full gate run first.
 
-## Built by an agent team, and used as a test bed
+`scripts/check-forks.sh` and `fork-sync.yml` (daily, thirty minutes later)
+fast-forward the two module forks when a `FORK_SYNC_TOKEN` secret is configured,
+and report otherwise. A sync never moves a pin, so it cannot change the binary.
 
-This repository is built by Qoder's agent team, and it doubles as a test bed for
-that team's own capability. The deliverable is the binary; the working method is
-the thing under test.
+The forks exist so that no upstream push can change what this repository
+produces. The cost: no upstream fixes until the fork is synced.
 
-## Roles and evidence discipline
+## Version history
 
-The chain is fixed: evidence gathering, requirement framing, spec decomposition,
-targeted implementation, item grading, release execution. Each stage hands over
-the original evidence rather than a summary of it. A stage whose evidence fails
-a check is sent back to the previous stage, and it does not advance until that
-check is satisfied.
+`v0.4.0` was the first release with all three roles on one port, and it carried a
+site-level `basic_auth` defect plus fork refs that resolved to live branch heads.
+`v0.4.3` removed the defect, pinned both fork commits, and added the arm64
+execution record. `v0.5.0` closed REALITY with the E2E harness and the redacted
+`evidence/v0.5.0/` capture set. Earlier tags are retired; the release notes in
+`.gate/release-notes-*.md` are the changelog, not this file.
 
-## Known limitations
+## Built by an agent team
 
-**naive TLS uses an internal CA.** naive terminates TLS with Caddy's own
-internal CA, so a client must trust the root certificate before it can connect
-at all; on a clean machine the root has to be installed first. A client without
-it sees a failed handshake, and that is not a configuration error.
+This repository is built by an agent team and doubles as a test bed for that
+team's working method. The deliverable is the binary; the method under test is
+the evidence chain, where each stage hands over the original evidence rather
+than a summary of it.
 
-**REALITY matching.** The `serverNames` and `dest` settings must match a real
-domain that resolves and serves TLS. A mismatch fails at connection time.
+## What this document does not claim
 
-**HTTP/3 is off by design.** The `protocols h1 h2` pin removes the QUIC
-listener, so HTTP/3 is not offered at all. Earlier local measurements of H3
-predate the pin and are history, not a description of the shipped config.
-
-**Byte identity across reruns.** The toolchain is now pinned, but a
-byte-identical rebuild is still unproven: two clean builds of the same commit
-with the same inputs have not been compared. Build paths, build IDs, or other
-compiler inputs may still produce different bytes. The fixed Go patch removes
-toolchain-version drift; it is not a reproducibility claim by itself.
-
-## Quick start
-
-1. Download the assets from the release page: `caddy-linux-amd64`,
-   `caddy-linux-arm64`, `SHA256SUMS`, and `pins.txt`. The release also carries
-   `LICENSE`, `THIRD_PARTY_NOTICES.md`, and the four license texts
-   (`Apache-2.0.txt`, `MIT.txt`, `BSD-3-Clause-Go.txt`, `MPL-2.0.txt`); they
-   are not part of `SHA256SUMS`.
-2. From the directory that holds them, run `sha256sum -c SHA256SUMS`. The
-   checksum file lists bare filenames, so the check reports a failure if you run
-   it from somewhere else.
-3. To trigger a build by hand, run the workflow with `workflow_dispatch`. After
-   syncing a fork, run the build again; the sync itself does not start one.
-
-## Confidentiality and unproven claims
-
-Nothing in this document names a real domain, a public address, a cloud
-instance, a credential, a unique identifier, or a REALITY key. Where a concrete
-value would be needed, the text either omits it or points at `deploy/` and
-`docs/`, which is where the redacted placeholders live.
-
-This document does not claim that a byte-identical rebuild has been
-established. HTTP/3 is not claimed at all: the delivery config turns it off.
-Both are written as not done, here and in the limitations above.
+- No real domain, public address, cloud instance, credential, unique identifier
+  or REALITY key appears here. Where a concrete value would be needed, the text
+  points at `deploy/` and `docs/`, which hold redacted placeholders.
+- Byte-identical rebuilds are not established. The toolchain is pinned, but two
+  clean builds of the same commit with the same inputs have not been compared;
+  build paths, build IDs and other compiler inputs may still differ.
+- HTTP/3 is not claimed. The delivery config turns it off, and earlier local H3
+  measurements predate the pin.
 
 ## Licensing
 
 The repository's own material is proprietary and all rights reserved; see
-`LICENSE` (`LicenseRef-Proprietary`). The release binary links Apache-2.0,
-MIT and BSD-3-Clause components, and the Caddy source is modified at build
-time. `THIRD_PARTY_NOTICES.md`, `LICENSES/` and `docs/LICENSING.md` record the
-components, the upstream refs, the license-text hashes and the distribution
-obligations. This is a provenance record, not legal advice.
-
-## Out of scope in this round
-
-License texts and third-party notices were not verified in this round, so no
-license conclusion is drawn here. Community files and an English copy are out of
-scope for this round as well.
+`LICENSE` (`LicenseRef-Proprietary`). The release binary links Apache-2.0, MIT
+and BSD-3-Clause components, and the Caddy source is modified at build time.
+`THIRD_PARTY_NOTICES.md`, `LICENSES/` and `docs/LICENSING.md` record the
+components, the upstream refs, the license-text hashes and the obligations.
+This is a provenance record, not legal advice.

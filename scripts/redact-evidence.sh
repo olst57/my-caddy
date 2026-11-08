@@ -27,7 +27,8 @@
 # start with PM-, notes-, PUBLISH- or GRADE- (never published, E7), except
 # *.md (the remaining documents are outside this round's evidence set), except
 # the harness stop marker STOP.txt, and except subdirectories. On the round-7
-# capture directory that yields exactly the 23 files of the must-publish list.
+# capture directory that yielded the must-publish set, which is now archived at
+# the v0.5.0 tag rather than kept in the working tree.
 
 set -u
 LC_ALL=C

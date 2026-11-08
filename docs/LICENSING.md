@@ -70,6 +70,14 @@ four original binary/provenance assets plus the license and notice set:
 The binary file names and their hashes are unchanged. `tests/licenses/check.sh`
 fails if the local texts, SPDX identifiers or notices drift from this record.
 
+The `v0.5.0` release was cut before that set was attached and now carries the
+same six files, so both releases present an identical license surface. Its
+notice is a `v0.5.0`-specific copy of `THIRD_PARTY_NOTICES.md`: the release
+line names `v0.5.0` and the Go runtime row is `go1.26.9`, which is the runtime
+that built the published binaries. The repository copy still anchors
+`v0.4.3`/`go1.26.10` because that is what `tests/licenses/check.sh` asserts;
+the two differ only in those two lines.
+
 ## What is not claimed
 
 - This is not legal advice.

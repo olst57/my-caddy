@@ -36,7 +36,7 @@ verifier, then runs `tests/coexist/run.sh` against that same binary on
 <https://github.com/olst57/my-caddy/actions/runs/42049087626>, on commit
 `75bd95a`: `offline` passed 26/26 (`VERIFY: PASS`) and `coexist` passed 7/7
 (`COEXIST: PASS`). The historical verifier runs were manual, on ubuntu-latest
-in a GitHub Codespace and on `hw-gz`. See
+in a GitHub Codespace and on the Linux test host. See
 `docs/VERIFY.md` for the provenance of that run and for the `chmod +x`
 requirement. The reproducibility limit is stated there as well; its evidence
 entry (D-5) is in `.gate/release/DEVIATIONS.md`, which is gitignored and not part
@@ -82,12 +82,12 @@ instead of silently downloading a replacement toolchain.
 The `v0.4.3` receipt records `go1.26.10`. That release, its assets, and its
 evidence are historical records and are not rewritten by this pin.
 
-This closes the defect the v0.4.3 release exposed. The binary used for the first
-`hw-gz` measurement was built when `caddy-l4` head was `f607ccea…`; by the time
-the release workflow ran, head had advanced to `96e1a6bf…`, so the published
-asset had a different sha256 from the tested tree. v0.4.3 was handled by
-re-running the gate on the downloaded asset; the follow-up pins the input so
-the mismatch cannot recur.
+This closes the defect the v0.4.3 release exposed. The binary used for the
+first Linux test host measurement was built when `caddy-l4` head was
+`f607ccea…`; by the time the release workflow ran, head had advanced to
+`96e1a6bf…`, so the published asset had a different sha256 from the tested
+tree. v0.4.3 was handled by re-running the gate on the downloaded asset; the
+follow-up pins the input so the mismatch cannot recur.
 
 Changing a pin is a reviewable edit plus a rebuild. `tests/pins/check.sh`
 verifies the file shape, refuses any `git ls-remote` in the two build paths,
@@ -219,7 +219,7 @@ assertions as item `S7-15`.
 ## Which architecture was executed
 
 `caddy-linux-amd64` is the native artifact: it runs the 26-item offline gate
-and the 8-item coexistence suite on `hw-gz` and on the CI runner.
+and the 8-item coexistence suite on the Linux test host and on the CI runner.
 
 `caddy-linux-arm64` is no longer artifact-verified only. The manual
 `verify-arm64-release` workflow downloads the published `v0.4.3` asset, checks
@@ -270,10 +270,10 @@ evidence, and this document does not claim otherwise.
 This label means "never attempted on any host in this slice", and it is
 deliberately narrower than it used to be. One entry that v0.2.0 listed here no
 longer holds: `caddy run`, a listener bind, a TLS handshake and an HTTP request
-**were** performed on `hw-gz` for the v0.2.1 runtime re-run recorded in
-`docs/VERIFY.md` and in `.gate/release/SP4B-D1.txt`, `SP4B-D2.txt` and
-`SP4B-D5.txt`. They are not part of the offline verifier, and they were not run
-on the Windows authoring host. What has still never been attempted:
+**were** performed on the Linux test host for the v0.2.1 runtime re-run recorded in
+`docs/VERIFY.md` and in `git show v0.5.0:evidence/SP4B-D1.txt`, `SP4B-D2.txt`
+and `SP4B-D5.txt`. They are not part of the offline verifier, and they were not
+run on the Windows authoring host. What has still never been attempted:
 
 - Any xray start.
 - Any REALITY session through the layer4 path. The runtime re-run exercised the
@@ -295,7 +295,7 @@ The S3 items that require the binary **were** executed — on ubuntu-latest, in 
 GitHub Codespace, against the artifact from run 41069346485, after
 `chmod +x`. The verifier printed `VERIFY: PASS` there, over the item set that
 existed at that time. `docs/VERIFY.md` states it and the transcript records it.
-For v0.2.1 the whole verifier was re-run on `hw-gz` after the S3-9 assertion
+For v0.2.1 the whole verifier was re-run on the Linux test host after the S3-9 assertion
 changed, against the same binary by sha256, and again printed `VERIFY: PASS`;
 that run and its log are described in `docs/VERIFY.md`. The item set has since
 grown: `scripts/verify.sh` now declares `EXPECTED_ITEMS=26`, and

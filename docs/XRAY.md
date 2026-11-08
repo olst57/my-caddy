@@ -9,10 +9,11 @@ The skeleton is placeholder-only. It is **not runnable as shipped**: with
 asserts otherwise, and no xray process was started on any host.
 
 > That paragraph describes the v0.2.1 slice. Sprint 5 has since run a real xray
-> against this same configuration shape on `hw-gz`; the version, the field
-> positions and what was measured are in
-> [Measured on hw-gz (Sprint 5)](#measured-on-hw-gz-sprint-5) at the end, with
-> the raw command output in `.gate/release/SP5-C1.txt` … `SP5-C6.txt`.
+> against this same configuration shape on the Linux test host; the version,
+> the field positions and what was measured are in
+> [Measured on the Linux test host (Sprint 5)](#measured-on-the-linux-test-host-sprint-5)
+> at the end, with the raw command output in `git show v0.5.0:evidence/SP5-C1.txt`
+> … `SP5-C6.txt`.
 
 ## The division of labour
 
@@ -144,13 +145,13 @@ Windows authoring host, which fail-closes at preflight.
 This heading covers the xray *runtime* as it stood in the v0.2.1 slice, and it
 was accurate on every host used in that slice — no xray process had been
 started anywhere. It is superseded by
-[Measured on hw-gz (Sprint 5)](#measured-on-hw-gz-sprint-5) below. It is not a
-statement about the Caddy-side offline checks, which ran and passed on Linux;
-see `docs/VERIFY.md` for those.
+[Measured on the Linux test host (Sprint 5)](#measured-on-the-linux-test-host-sprint-5)
+below. It is not a statement about the Caddy-side offline checks, which ran and
+passed on Linux; see `docs/VERIFY.md` for those.
 
 - Any xray start *in the v0.2.1 slice*. No process was launched and no socket
   was bound on any host during that slice. Sprint 5 has since started xray on
-  `hw-gz`; see below.
+  the Linux test host; see below.
 - Whether xray accepts these placeholders. It will not; they are placeholders.
 - Any handshake, any PROXY header observed on the wire. That was Gate 0's probe,
   not this slice. Sprint 5 has since captured both; see below.
@@ -165,18 +166,19 @@ production one. Caddy's internal CA leaves the certificate subject DN empty, so
 the hostname is present only in the SAN extension. Any certificate assertion
 must read the SAN, never `subject=`.
 
-## Measured on hw-gz (Sprint 5)
+## Measured on the Linux test host (Sprint 5)
 
-Sprint 5 ran a real xray against the shape this document describes, on `hw-gz`
-(Ubuntu 24.04.4 LTS, x86_64, root), on 2026-10-31 UTC. Inbound 443 is closed at
-the cloud security group — that was recorded in the run session but is **not**
-part of the evidence bundle, as noted under [Provenance](#provenance) below — so
-every connection in the run is host-local: the listener is Caddy on `:443`, the
-client is a second xray on the same box. The packet captures attached to C1 and
-C2 are consistent with that premise: their outer endpoints are only `127.0.0.1`
+Sprint 5 ran a real xray against the shape this document describes, on the
+Linux test host (Ubuntu 24.04.4 LTS, x86_64, root), on 2026-10-31 UTC. Inbound
+443 is closed at the cloud security group — that was recorded in the run
+session but is **not** part of the evidence bundle, as noted under
+[Provenance](#provenance) below — so every connection in the run is host-local:
+the listener is Caddy on `:443`, the client is a second xray on the same box.
+The packet captures attached to C1 and C2 are consistent with that premise:
+their outer endpoints are only `127.0.0.1`
 and the host's own `172.31.2.95`. Raw output, including every command, is in
-`.gate/release/SP5-C1.txt` … `SP5-C6.txt`; the PASS/FAIL table and the numbered
-deviations are in `.gate/release/SPRINT5-SUMMARY.md`.
+`git show v0.5.0:evidence/SP5-C1.txt` … `SP5-C6.txt`; the PASS/FAIL table and
+the numbered deviations are in `.gate/release/SPRINT5-SUMMARY.md`.
 
 `deploy/xray/config.json` and `deploy/Caddyfile` were **not** modified by
 Sprint 5. No item proved the shipped pairing wrong.
@@ -302,8 +304,8 @@ Sprint 6 has since run what this section used to list: HTTP/3 to the site
 (`3 200`, SP6-F1), an unknown SNI (SP6-F3 — admin `200` before and after, the
 xray log byte-identical, and the alert `internal error` rather than the
 `unrecognized_name` the spec named), and B's two terminal states (SP6-F4, hit
-with the upstream down; SP6-F5, miss → `404`) all passed on `hw-gz`, with the
-raw output in `.gate/release/SP6-F1.txt` … `SP6-F5.txt`.
+with the upstream down; SP6-F5, miss → `404`) all passed on the Linux test
+host, with the raw output in `git show v0.5.0:evidence/SP6-F1.txt` … `SP6-F5.txt`.
 
 The H3 result above is historical. `deploy/Caddyfile` now pins
 `protocols h1 h2`, which removes the QUIC listener, so the current delivery

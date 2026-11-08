@@ -81,8 +81,9 @@ WORKDIR="${E2E_WORKDIR:-$REPO_ROOT/.gate/e2e}"
 TIMEOUT="${E2E_TIMEOUT:-25}"
 CONTROL_TIMEOUT="${E2E_CONTROL_TIMEOUT:-90}"
 
-# Measured on hw-gz against this Caddy build. caddy-l4's proxy handler writes
-# the address the client dialled, not the loopback upstream it forwards to.
+# Measured on the Linux test host against this Caddy build. caddy-l4's proxy
+# handler writes the address the client dialled, not the loopback upstream it
+# forwards to.
 PROXYV2_DEST="${E2E_PROXYV2_DEST:-127.0.0.1:8443}"
 
 REALITY_PORT=8443

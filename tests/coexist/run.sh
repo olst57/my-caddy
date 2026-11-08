@@ -359,8 +359,9 @@ fi
 # `protocols h1 h2` Caddy must not create the QUIC listener at all; CO-1 can
 # only see its absence indirectly, as a missing Alt-Svc header on one response.
 #
-# Measured on hw-gz against this same binary: adding `h3` to the directive
-# produces `UNCONN *:443` immediately, and removing it leaves no UDP listener.
+# Measured on the Linux test host against this same binary: adding `h3` to the
+# directive produces `UNCONN *:443` immediately, and removing it leaves no UDP
+# listener.
 # So the filter below is sensitive to the exact regression it is meant to catch.
 #
 # The TCP assertion is the control. `ss -lun` alone would also pass if Caddy

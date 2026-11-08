@@ -256,7 +256,7 @@ fi
 # 443 -- consolidates into ONE server, `srv0`, and the global
 # `servers :443 { listener_wrappers { layer4 {...} tls } }` block applies to
 # that server. Measured: srv0 listen=[:443] wrappers=[layer4,tls]
-# hosts=[b.test]. See .gate/release/adapted.json and DEVIATIONS.md.
+# hosts=[b.test]. See `git show v0.5.0:evidence/adapted.json` and DEVIATIONS.md.
 #
 # Asserting the wrapper clause would demand restructuring deploy/Caddyfile, and
 # the split was measured to be unreachable from the Caddyfile at all: `b.test:443`
@@ -929,54 +929,27 @@ if [ "$s15_ok" -eq 1 ]; then emit S7-15 PASS; else
 fi
 
 # ---------------------------------------------------------------- S7-18
-# C4: deploy/ is frozen at v0.3.0, with exactly one recorded amendment: the
-# `protocols h1 h2` protocol-surface pin. Fail closed when the ref is missing —
-# an unverifiable freeze must never read as a pass.
+# C4: deploy/ is frozen at v0.4.3, the last release cut before the freeze was
+# recorded, and the current tree must carry it byte for byte. The earlier
+# baseline was v0.3.0 plus a whitelisted `protocols h1 h2` amendment; that
+# amendment is now part of the frozen tree, so no per-line exemption is needed
+# and none is granted. Fail closed when the ref is missing — an unverifiable
+# freeze must never read as a pass.
 #
-# The amendment is recognised by its CONTENT, not by a commit hash. A hash would
-# make the guard depend on history being rewritten identically, and it would
-# still pass if the same commit carried anything else. Content makes the guard
-# say what it means: deploy/ may differ from v0.3.0 only in deploy/Caddyfile,
-# only by additions, and the added non-comment lines must be exactly one
-# `protocols h1 h2`. Anything else — a second file, a deletion, an extra
-# directive, an untracked file — is a FAIL.
-if ! git rev-parse --verify --quiet 'v0.3.0^{commit}' >/dev/null 2>&1; then
+# A single non-empty `git diff` against the baseline, in any file, with any
+# number of added or deleted lines, is a FAIL. So is an untracked file inside
+# deploy/, which a diff would not show at all.
+if ! git rev-parse --verify --quiet 'v0.4.3^{commit}' >/dev/null 2>&1; then
 	emit S7-18 FAIL
-	printf '  v0.3.0 ref missing; deploy freeze unverifiable\n' >&2
+	printf '  v0.4.3 ref missing; deploy freeze unverifiable\n' >&2
 else
 	s18_ok=1
-	s18_numstat="$(git diff --numstat 'v0.3.0' -- deploy/ 2>/dev/null)"
+	s18_numstat="$(git diff --numstat 'v0.4.3' -- deploy/ 2>/dev/null)"
 	s18_untracked="$(git ls-files --others --exclude-standard -- deploy/ 2>/dev/null)"
 	if [ -n "$s18_numstat" ]; then
-		s18_files=$(printf '%s\n' "$s18_numstat" | awk '{print $3}')
-		s18_deleted=$(printf '%s\n' "$s18_numstat" | awk '{s += $2} END {print s + 0}')
-		if [ "$s18_files" != "deploy/Caddyfile" ]; then
-			s18_ok=0
-			printf '  deploy/ differs from v0.3.0 in files other than deploy/Caddyfile:\n%s\n' \
-				"$s18_numstat" >&2
-		fi
-		if [ "$s18_deleted" -ne 0 ]; then
-			s18_ok=0
-			printf '  deploy/ delta removes %s line(s) from the frozen tree\n' \
-				"$s18_deleted" >&2
-		fi
-		if [ "$s18_files" = "deploy/Caddyfile" ] && [ "$s18_deleted" -eq 0 ]; then
-			s18_added=$(git diff 'v0.3.0' -- deploy/Caddyfile 2>/dev/null | awk '
-				/^+++ / {next}
-				/^\+/ {
-					line = substr($0, 2)
-					sub(/[[:space:]]*#.*$/, "", line)
-					gsub(/[[:space:]]+/, " ", line)
-					sub(/^ /, "", line)
-					sub(/ $/, "", line)
-					if (line != "") print line
-				}')
-			if [ "$s18_added" != "protocols h1 h2" ]; then
-				s18_ok=0
-				printf '  deploy/Caddyfile adds directives beyond the protocol pin:\n%s\n' \
-					"$s18_added" >&2
-			fi
-		fi
+		s18_ok=0
+		printf '  deploy/ differs from the v0.4.3 frozen tree:\n%s\n' \
+			"$s18_numstat" >&2
 	fi
 	if [ -n "$s18_untracked" ]; then
 		s18_ok=0

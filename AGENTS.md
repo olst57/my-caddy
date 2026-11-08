@@ -57,7 +57,7 @@ claim is reproducible from evidence.
 - YAML — GitHub Actions workflows under `.github/workflows/`.
 
 ## Runtime
-- Linux `amd64` for execution and runtime tests on `hw-gz` and CI.
+- Linux `amd64` for execution and runtime tests on the Linux test host and CI.
 - Linux `arm64` for execution of the published asset on `ubuntu-24.04-arm`;
 - Windows is authoring-only: it can edit files and run Git, but cannot execute the Linux ELF.
 - Go modules for the upstream and forked Caddy modules.
@@ -191,7 +191,7 @@ claim is reproducible from evidence.
 - Depends on: Xray on `127.0.0.1:19098` and the site backend on
 - Used by: real clients and `tests/coexist/run.sh`.
 - Purpose: make regressions fail before release.
-- Contains: `scripts/verify.sh` (26 items), `tests/coexist/run.sh` (7 items),
+- Contains: `scripts/verify.sh` (26 items), `tests/coexist/run.sh` (8 items),
 - Depends on: the built binary, `jq`, Linux, root for the coexistence suite.
 - Used by: CI, release gating, and the agent-team review loop.
 

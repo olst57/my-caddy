@@ -8,7 +8,8 @@ and sends no HTTP request; it needs `caddy adapt`/`validate` and `jq` only.
 Every command quoted there was executed, and `docs/transcript-v0.2.0.txt`
 records each with its real exit code and the host it ran on. The runtime section
 later in this document — "What the runtime actually answers" — is different in
-kind: it comes from a live `caddy run` on `hw-gz` and is **not** reproducible
+kind: it comes from a live `caddy run` on the Linux test host and is **not**
+reproducible
 from the repository alone. It is evidence for the behaviours v0.2.1 asserts, and
 it is not part of the offline verifier.
 
@@ -17,13 +18,14 @@ it is not part of the offline verifier.
 Two hosts matter, and they produced different lines. The transcript labels
 every record with its host so a reader can tell which host produced which line.
 
-**The v0.2.1 run was repeated on `hw-gz`.** The S3-9 assertion changed in
-v0.2.1, so the whole verifier was re-run against the corrected config: as `root`
-on `hw-gz` (Ubuntu 24.04, `Linux 6.8.0-136-generic x86_64`) against the same
-binary, sha256 `1a9115339c7a0edefd692d74324bd4906508c40b11bb781e841d5910337b2624`.
+**The v0.2.1 run was repeated on the Linux test host.** The S3-9 assertion
+changed in v0.2.1, so the whole verifier was re-run against the corrected
+config: as `root` on the Linux test host (Ubuntu 24.04,
+`Linux 6.8.0-136-generic x86_64`) against the same binary, sha256
+`1a9115339c7a0edefd692d74324bd4906508c40b11bb781e841d5910337b2624`.
 Every item in the set that existed then passed and the verifier printed
-`VERIFY: PASS`; the log is `.gate/release/verify-run.log`. That run was manual
-too. Before the config was
+`VERIFY: PASS`; the log is `git show v0.5.0:evidence/verify-run.log`. That run
+was manual too. Before the config was
 corrected, the same verifier was run on that host against the v0.2.0 config and
 S3-9 FAILed, with every other item PASS: the site's subroute chain read
 `["authentication","forward_proxy"]` and carried no `reverse_proxy`. That is the
@@ -64,7 +66,7 @@ lines. Both jobs are blocking, and that was measured rather than assumed: one
 control run failed `offline` alone (run 42052579628), and another failed
 `coexist` alone while `offline` passed (run 42053168208). Every other run
 quoted below is historical and was manual: v0.2.0 in a Codespace, v0.2.1 on
-`hw-gz`.
+the Linux test host.
 
 ### The tagged release, and which binary the evidence describes
 
@@ -248,7 +250,7 @@ naive property, and it produced the defect it was supposed to catch: the
 site-level `basic_auth` it demanded ran before `forward_proxy` and answered
 `401` with `www-authenticate: Basic realm="restricted"` to every request — a
 plain `GET` and a correctly credentialed `CONNECT` alike. Measured on the v0.2.0
-config, `.gate/release/SP4-D1.txt`. naive authenticates the CONNECT itself,
+config, `git show v0.5.0:evidence/SP4-D1.txt`. naive authenticates the CONNECT itself,
 through `forward_proxy`'s own `basic_auth` reading `Proxy-Authorization`; that
 is a separate mechanism and it needs no `authentication` handler in the site.
 Do not reintroduce either the clause or the site-level `basic_auth`.
@@ -378,9 +380,9 @@ the new tree.
 `.gate/`, `dist/` and `.env` are not scanned, so local build state and local
 secrets cannot make the gate noisy or leak into its output.
 
-The tree mutations below were run on `hw-gz` alongside the two `deploy/`
-mutations above, each on the real tree and each reverted afterwards. The first
-row is the baseline and the last is the ignored-path control:
+The tree mutations below were run on the Linux test host alongside the two
+`deploy/` mutations above, each on the real tree and each reverted afterwards.
+The first row is the baseline and the last is the ignored-path control:
 
 | mutation | item result |
 | --- | --- |
@@ -435,8 +437,8 @@ $ CADDY_BIN=dist/caddy-linux-amd64 bash scripts/verify.sh  # expect-fail
 
 On the Linux host the verifier is green. The recorded output below is from
 ubuntu-latest in a GitHub Codespace against the artifact from `build` run
-41069346485; the v0.2.1 run on `hw-gz` produced the same lines over that run's
-item set and the same final line.
+41069346485; the v0.2.1 run on the Linux test host produced the same lines over
+that run's item set and the same final line.
 
 ```bash
 $ bash scripts/verify.sh | tee .gate/release/verify-run.log
@@ -463,9 +465,10 @@ VERIFY: PASS
 ```
 
 This line pipes through `tee` so the log is kept; it is the form recorded in the
-transcript with `exit=0` under the HOST B heading. `.gate/release/verify-run.log`
-holds the **v0.2.1** run's output, i.e. one PASS line per item in that run's set
-and `VERIFY: PASS`, produced on `hw-gz` after S3-9 changed.
+transcript with `exit=0` under the HOST B heading.
+`git show v0.5.0:evidence/verify-run.log` holds the **v0.2.1** run's output, i.e.
+one PASS line per item in that run's set and `VERIFY: PASS`, produced on the
+Linux test host after S3-9 changed.
 
 ## The item set, the summary line, and the binary precondition
 
@@ -540,10 +543,15 @@ ITEM S7-15 PASS
 ITEM S7-18 FAIL
 ```
 
-The tagged remote carries `v0.3.0`. A full `git clone` fetches that ref, and
-`deploy/` has no diff from `v0.3.0` to the current HEAD, so `S7-18` passes there
-while `deploy/` remains unchanged since `v0.3.0`. The transcript above is kept as
+The tagged remote carries `v0.4.3`. A full `git clone` fetches that ref, and
+`deploy/` has no diff from `v0.4.3` to the current HEAD, so `S7-18` passes there
+while `deploy/` remains unchanged since `v0.4.3`. The transcript above is kept as
 recorded: that clone held no tag, which is why it printed FAIL.
+
+The baseline moved from `v0.3.0` to `v0.4.3` when the `protocols h1 h2` pin
+became part of the frozen tree rather than a whitelisted amendment to it. The
+item no longer parses the delta looking for one allowed directive; any diff
+against `v0.4.3` under `deploy/`, and any untracked file there, is a FAIL.
 
 A shallow clone (`--depth 1`) or a clone that fetches no tags lacks the ref, so
 `S7-18` FAILs closed rather than skipping — a freeze that cannot be diffed is
@@ -552,12 +560,13 @@ any CI checkout of `verify.sh` `fetch-depth: 0`.
 
 ## What the runtime actually answers
 
-Everything in this section was measured with `caddy run` on `hw-gz`, against
-the delivery config with **only** `<NAIVE_USER>` and `<NAIVE_PASSWORD>` replaced
-by throwaway test values (`diff -u` in the evidence proves nothing else
-changed), and a test backend answering `200` + `X-Site: v4` + `SITE-BODY-v4` on
-`127.0.0.1:8080`. The evidence files are `.gate/release/SP4B-D1.txt`,
-`SP4B-D2.txt` and `SP4B-D5.txt`. Two of v0.2.0's spec sentences guessed the
+Everything in this section was measured with `caddy run` on the Linux test
+host, against the delivery config with **only** `<NAIVE_USER>` and
+`<NAIVE_PASSWORD>` replaced by throwaway test values (`diff -u` in the evidence
+proves nothing else changed), and a test backend answering `200` + `X-Site: v4`
++ `SITE-BODY-v4` on `127.0.0.1:8080`. The evidence files are
+`git show v0.5.0:evidence/SP4B-D1.txt`, `SP4B-D2.txt` and `SP4B-D5.txt`. Two of
+v0.2.0's spec sentences guessed the
 wrong observables; the properties they were reaching for are recorded here as
 measured, which is a correction of the text, not a loosening of the check.
 
@@ -596,7 +605,7 @@ treat `200 OK` alone as proof.
 The CONNECT observation above is an HTTP/1.1 proxy hop. `tests/coexist/run.sh`
 CO-4 asserts that leg, and CO-6 asserts the other one: the same credentialled
 CONNECT with `curl --proxy-http2`, so the hop is negotiated as h2 before any
-CONNECT is sent. Measured on `hw-gz` against the delivery config:
+CONNECT is sent. Measured on the Linux test host against the delivery config:
 
 ```text
 ALPN: server accepted h2
@@ -630,8 +639,8 @@ listening in the same sample. The second half is the control: `ss -lun` alone
 would also be satisfied by a Caddy that had crashed, and the earlier items have
 already run by then.
 
-Measured on `hw-gz` with the same binary. The mutation adds `h3` to the
-directive and nothing else:
+Measured on the Linux test host with the same binary. The mutation adds `h3` to
+the directive and nothing else:
 
 | tree | `ss -lnt 'sport = :443'` | `ss -lun 'sport = :443'` | item |
 | --- | --- | --- | --- |
@@ -704,8 +713,9 @@ Sprint 4 exercised two `probe_resistance` variants — the bare form and a
 on all three: `200` + `X-Site`, `0` x `407`, `0` x `Proxy-Authenticate`. That is
 the whole claim, and U1 is closed only to that extent: this is not evidence that
 a secret path resists probing in general, and nothing here says what another
-client or another probe set would see. Measured in `.gate/release/SP4-D6.txt`;
-not re-run in v0.2.1. The delivery config keeps the form it already has.
+client or another probe set would see. Measured in
+`git show v0.5.0:evidence/SP4-D6.txt`; not re-run in v0.2.1. The delivery config
+keeps the form it already has.
 
 ### The REALITY default pair is a placeholder pair
 
@@ -761,10 +771,10 @@ two are `fixed` (RTA-16, RTA-17), five are `documented limitation` (RTA-8,
 RTA-11, RTA-12, RTA-15, RTA-20), and two are `deferred` (RTA-13, RTA-14).
 
 The deferred rows are the REALITY measurements above. They close only with a
-handshake through the tunnel against a replaced destination, and nothing in
-this tree performs that handshake **as of `v0.4.3`**. That table is the
-authoritative closure record for the round; it is linked here so a release
-check does not have to trust this paragraph.
+handshake through the tunnel against a replaced destination. As of `v0.4.3`
+nothing in this tree performed that handshake; `v0.5.0` added `tests/e2e/`,
+which does. That table is the authoritative closure record for the round; it is
+linked here so a release check does not have to trust this paragraph.
 
 ### A REALITY round was run by hand on 2026-11-06
 
@@ -786,10 +796,11 @@ unknown-SNI fallback, and the limits of what the round proves.
 acceptance: the test stack used a self-signed certificate, a non-443 port, and
 a test SNI, so it says nothing about production cover story. No raw capture was
 retained — the report is the record, and section 7 of it says so explicitly.
-Nothing in `tests/` replays the round yet; the requirement set `E2E-01` through
-`E2E-04` in `.planning/REQUIREMENTS.md` is the work that turns it into a guard.
-Do not cite the report as evidence that the repository's REALITY leg is
-regression-tested.
+This section described the state before `v0.5.0`: at that point nothing in
+`tests/` replayed the round. `tests/e2e/` now does — eleven items covering the
+tunnel and certificate, PROXY v2, bad UUID / publicKey / shortId, naive
+credentials, the private-target ACL, unknown SNI, and serial plus concurrent
+load. Cite the harness, not this report, for the regression claim.
 
 ## What the Windows authoring host cannot do
 
@@ -865,8 +876,9 @@ layer4 route does not claim has nothing to terminate it. The decision freezes
 measured behaviour; it does not edit the frozen delivery file. The earlier
 statement that an unmatched SNI would receive the site certificate did not
 reproduce and is retracted. Choosing `decoy` or `default` later is a separate,
-explicitly approved change to `deploy/Caddyfile` plus a matching update to
-`scripts/verify.sh` item S7-18, which is the only sanctioned amendment.
+explicitly approved change to `deploy/Caddyfile` plus a new S7-18 baseline —
+the item compares `deploy/` against `v0.4.3` byte for byte, so an approved edit
+means cutting the next release and moving the ref, not widening an exemption.
 
 The Caddyfile under test is **derived** from `deploy/Caddyfile` by literal
 substitution, then reversed and diffed against the delivery file; a non-empty
