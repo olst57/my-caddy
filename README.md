@@ -191,14 +191,23 @@ disables `acl` and `ports`, which removes the default private-network deny.
 Two scheduled workflows watch the outside world. Neither one changes what this
 repository builds.
 
-`scripts/check-upstream.sh` and `upstream-watch.yml` (daily) compare every pin
-against its upstream and open or update one issue when something moved. They
-never edit `pins/build-inputs.env` and never start a build: a bump needs a fork
-sync, a patch check and a full gate run first.
+`scripts/check-upstream.sh` and `upstream-watch.yml` run on the 1st and 15th at
+01:00 UTC. The Caddy and `xcaddy` tags come from upstream releases; the two
+module SHAs come from this project's own forks
+(`olst57/forwardproxy` on `naive`, `olst57/caddy-l4` on
+`master`), which are auto-synced from upstream, so the fork head is the commit
+the build would eventually follow. The check never edits
+`pins/build-inputs.env` and never starts a build: a bump needs a fork sync, a
+patch check and a full gate run first. While its tracking issue is already
+open, later runs stay silent: no comment, no edit, no duplicate.
 
-`scripts/check-forks.sh` and `fork-sync.yml` (daily, thirty minutes later)
-fast-forward the two module forks when a `FORK_SYNC_TOKEN` secret is configured,
-and report otherwise. A sync never moves a pin, so it cannot change the binary.
+`scripts/check-forks.sh` and `fork-sync.yml` still run daily at 01:30 UTC,
+fast-forward the two module forks when a `FORK_SYNC_TOKEN` secret is
+configured, and report otherwise. They also stay silent while their issue is
+already open. A sync never moves a pin, so it cannot change the binary.
+
+GitHub may start a scheduled run late, so these are cadences, not exact
+wall-clock delivery times.
 
 The forks exist so that no upstream push can change what this repository
 produces. The cost: no upstream fixes until the fork is synced.

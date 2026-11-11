@@ -97,9 +97,12 @@ artifact is built and again in `build` after both architectures are built.
 
 ### Knowing when upstream moves
 
-`scripts/check-upstream.sh` compares every pin with its upstream: the Caddy and
-`xcaddy` release tags, the `forwardproxy` `naive` head, the `caddy-l4` `master`
-head, and the latest stable Go release. It only reports. It never edits
+`scripts/check-upstream.sh` compares every pin with what the build would follow:
+the Caddy and `xcaddy` release tags and the latest stable Go release from
+upstream, but the two module SHAs from this project's own forks
+(`olst57/forwardproxy` on `naive`, `olst57/caddy-l4` on
+`master`). `fork-sync.yml` auto-syncs both forks, so the fork head is the commit
+the build would eventually follow. The check only reports. It never edits
 `pins/build-inputs.env`, because a bump has to prove that the read-idle-timeout
 patch still applies and that both forks were synced before their commits move.
 
@@ -107,16 +110,21 @@ patch still applies and that both forks were synced before their commits move.
 diverged from the maintained line by a README-only commit, so a master
 comparison would always report a false positive. The pin is a `naive` commit.
 
-The scheduled workflow `.github/workflows/upstream-watch.yml` runs it daily and
-opens one tracking issue when a pin is behind, commenting on that issue on later
-runs instead of creating duplicates. A manual run takes a `dry_run` input that
-prints the comparison without touching issues. The workflow fails only when a
-source cannot be read; drift is a report, not a red build.
+The scheduled workflow `.github/workflows/upstream-watch.yml` runs it on the 1st
+and 15th at 01:00 UTC and opens one tracking issue when a pin is behind. While
+that issue is already open, later runs do nothing: no comment, no edit, no
+duplicate; a new issue is opened only when none is open. A manual run takes a
+`dry_run` input that prints the comparison without touching issues. The workflow
+fails only when a source cannot be read; drift is a report, not a red build.
+GitHub may start a scheduled run late, so the cadence is not a wall-clock
+promise.
 
 The offline test `tests/upstream/check.sh` builds its fixtures from the pins
 file, so it stays valid after a deliberate bump, and it covers the in-sync,
-stale, missing-key, bad-argument, and missing-fixture paths. `verify` runs it
-with the other static checks.
+stale, missing-key, bad-argument, and missing-fixture paths. The offline test
+`tests/workflows/check.sh` guards the schedule and the quiet-while-open
+behaviour by reading the workflow files as text. `verify` runs both with the
+other static checks.
 
 A watcher is not an upgrade. Moving a pin still needs the fork sync, a patch
 rebase if the Caddy source moved, a full gate run, and a new receipt; the Go pin
@@ -132,15 +140,17 @@ and `olst57/caddy-l4`), and both forks mirror one upstream branch:
 
 `scripts/check-forks.sh` compares each fork with that branch and prints
 `FORK <name> ... state=in-sync|behind|ahead|diverged`. The scheduled
-`.github/workflows/fork-sync.yml` runs it daily at 01:30 UTC (09:30
-Asia/Shanghai). When a fork is behind, it fast-forwards it with `gh repo sync`;
-`ahead` and `diverged` are reported, never forced, because that would discard
-local commits.
+`.github/workflows/fork-sync.yml` runs it daily at 01:30 UTC. When a fork is
+behind, it fast-forwards it with `gh repo sync`; `ahead` and `diverged` are
+reported, never forced, because that would discard local commits.
 
 The sync needs a `FORK_SYNC_TOKEN` repository secret — a fine-grained token
 with `Contents: read and write` on the two fork repositories. Without it the
-workflow still runs and reports, and the issue it opens says so. The default
+workflow still runs and reports, and its issue body says so. The default
 `GITHUB_TOKEN` cannot write to another repository.
+
+If the tracking issue is already open, later runs do nothing: no comment, no
+edit, no duplicate. A new issue is opened only when none is open.
 
 **A sync does not move a pin.** The build checks out the exact commits in
 `pins/build-inputs.env`, so syncing only prepares the fork for a future bump;
