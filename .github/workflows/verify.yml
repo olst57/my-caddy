@@ -65,6 +65,8 @@ jobs:
         run: bash tests/upstream/check.sh
       - name: Fork sync logic is tested offline
         run: bash tests/forks/check.sh
+      - name: Watch workflows are tested offline
+        run: bash tests/workflows/check.sh
       - name: License record is complete
         run: bash tests/licenses/check.sh
       - name: Fixture address and protocol guard
