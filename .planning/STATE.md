@@ -6,10 +6,10 @@ current_phase: 06
 current_phase_name: Stability smoke, evidence, and release decision
 status: complete
 stopped_at: README rewritten for v0.5.0, the release set cut to v0.5.0 plus v0.4.3, and the prune executed on the remote.
-last_updated: "2026-11-08T16:10:00.000Z"
-last_activity: 2026-11-08
-last_activity_desc: Rewrote the public README, moved the S7-18 baseline to v0.4.3, and pruned six tags, two releases, and one branch on the remote
-state_head: 348734efa7ff80b78647b0408828b0e7f49aabe5
+last_updated: "2026-11-11T13:53:46.775Z"
+last_activity: 2026-11-11
+last_activity_desc: Moved upstream-watch to the 1st and 15th, sourced the two module pins from the forks, and made both watch workflows stay quiet while an issue is open
+state_head: 8a584d8b6d05e0b80f5e9b9959bb0c440072700e
 progress:
   total_phases: 3
   completed_phases: 3
@@ -35,8 +35,9 @@ read-only inputs.
 Phase: 06 — Stability smoke, evidence, and release decision
 Plan: 06-03 — Re-run both suites and decide on publication
 Status: Complete — owner approved, `v0.5.0` tagged and published
-Last activity: 2026-11-08 — README rewritten for `v0.5.0`; the remote now
-carries two releases (`v0.5.0`, `v0.4.3`), two tags and `main` only
+Last activity: 2026-11-11 — upstream-watch moved to the 1st and 15th, the two
+module pins now come from the forks, and both watch workflows stay quiet while
+their tracking issue is open
 
 ## Performance Metrics
 
@@ -123,6 +124,7 @@ affecting current work:
 - [Phase 6 follow-up]: Upstream drift is **reported**, never auto-applied. — A new Caddy tag can break the read-idle-timeout patch and both forks need syncing, so a bump stays a reviewed change; the daily watcher opens one issue and does not build.
 - [Phase 6 follow-up]: `forwardproxy` is watched on its `naive` branch, not `master`. — The pin is a `naive` commit; master stopped in 2024 and diverged by a README-only edit, so a master comparison reported a permanent false positive.
 - [Phase 6 follow-up]: Module forks are fast-forwarded daily, but only with an explicit `FORK_SYNC_TOKEN`; the pin never moves automatically. — `GITHUB_TOKEN` cannot write to another repository, and a synced fork head must not change today's binary.
+- [Quick 261111-u68]: The upstream watch runs on the 1st and 15th, reads both module SHAs from this project's forks, and stays silent while its tracking issue is open; `fork-sync` follows the same no-repeat rule. — Daily comments were noise, and the forks are the source of truth because `fork-sync` keeps them current.
 
 ### Pending Todos
 
@@ -151,6 +153,7 @@ affecting current work:
 | 261107-uwu | Report when a pinned input falls behind upstream | 2026-11-07 | 2c894df | complete | [261107-uwu-report-upstream-drift](./quick/261107-uwu-report-upstream-drift/) |
 | 261106-wsw | Pin Go 1.26.9 to match the official naiveproxy Caddy build | 2026-11-07 | decb4cf | complete | [261106-wsw-pin-go-1-26-9-to-match-naiveproxy-offici](./quick/261106-wsw-pin-go-1-26-9-to-match-naiveproxy-offici/) |
 | 261106-tfx | Close the v0.4.3 follow-ups: pin fork SHAs, execute arm64, conclude licenses | 2026-11-06 | db05ba0 | complete | [261106-tfx-close-v0-4-3-follow-ups-pin-fork-shas-ex](./quick/261106-tfx-close-v0-4-3-follow-ups-pin-fork-shas-ex/) |
+| 261111-u68 | Run the upstream watch twice monthly from the forks and stay quiet while an issue is open | 2026-11-11 | 8a584d8 | complete | [261111-u68-change-the-upstream-watch-workflow-to-ru](./quick/261111-u68-change-the-upstream-watch-workflow-to-ru/) |
 
 ## Deferred Items
 
