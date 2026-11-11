@@ -22,7 +22,7 @@
 #                       must not be that domain, and it proves the control in
 #                       CO-3 is not vacuous.
 #   CO-6  h2 leg        the same naive entry point over HTTP/2 on the proxy hop:
-#                       curl must report `CONNECT tunnel: HTTP/2 negotiated`,
+#                       curl must report `Establish HTTP/2 proxy tunnel`,
 #                       then a 200 and a non-empty body. CO-4 only proves the
 #                       HTTP/1.1 leg, so without this the h2 claim in README
 #                       would be untested.
@@ -343,7 +343,10 @@ else
 	h2_line="$(cat "$WORKDIR/h2.out" 2>/dev/null)"
 	h2_ok=1
 	[ "$h2_rc" -eq 0 ] || h2_ok=0
-	grep -q 'CONNECT tunnel: HTTP/2 negotiated' "$WORKDIR/h2.err" || h2_ok=0
+	# curl 8.5 printed "CONNECT tunnel: HTTP/2 negotiated"; curl 8.18 (the
+	# current ubuntu-latest runner) prints "Establish HTTP/2 proxy tunnel".
+	# The latter is present in both, so assert it instead of the old wording.
+	grep -q 'Establish HTTP/2 proxy tunnel' "$WORKDIR/h2.err" || h2_ok=0
 	[ "$(printf '%s' "$h2_line" | awk '{print $2}')" = 200 ] || h2_ok=0
 	[ "$(printf '%s' "$h2_line" | awk '{print $3}')" -gt 0 ] 2>/dev/null || h2_ok=0
 	grep -qi '^proxy-authenticate:' "$WORKDIR/h2.hdr" 2>/dev/null && h2_ok=0

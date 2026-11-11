@@ -609,9 +609,14 @@ CONNECT is sent. Measured on the Linux test host against the delivery config:
 
 ```text
 ALPN: server accepted h2
-CONNECT tunnel: HTTP/2 negotiated
+Establish HTTP/2 proxy tunnel to www.apple.com:443
 200, body 253563 bytes
 ```
+
+curl 8.5 printed `CONNECT tunnel: HTTP/2 negotiated` at that point; curl 8.18,
+which the current `ubuntu-latest` runner installs, prints `Establish HTTP/2
+proxy tunnel to ...` instead. CO-6 matches the latter because both versions
+emit it.
 
 CO-6 does **not** assert `%{http_version}`. That variable reports the version of
 the **origin** request inside the tunnel, which says nothing about the hop under

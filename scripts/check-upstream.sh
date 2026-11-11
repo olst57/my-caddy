@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
-# Compare the pinned build inputs with the projects they come from.
+# Compare the pinned build inputs with where they are read from today.
 #
 # Read-only. This script never edits pins/build-inputs.env: a bump stays a
 # reviewed change that has to pass the gate, because a new Caddy tag can break
 # the read-idle-timeout patch and the two forks have to be synced first.
+#
+# The Caddy tag, the xcaddy tag and the Go release are upstream lookups. The
+# two module SHAs are read from this project's own forks, not from the
+# upstream repositories: fork-sync.yml fast-forwards those forks from
+# upstream, and the fork head is therefore the commit the build would
+# eventually follow.
 #
 # Usage:
 #   bash scripts/check-upstream.sh
@@ -40,7 +46,7 @@ while [ "$#" -gt 0 ]; do
 		shift 2
 		;;
 	-h | --help)
-		sed -n '2,18p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+		sed -n '2,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 		exit 0
 		;;
 	*)
@@ -76,12 +82,15 @@ else
 
 	caddy_tag="$(gh api repos/caddyserver/caddy/releases/latest --jq .tag_name)" \
 		|| die "caddy release lookup failed"
-	# The maintained code is on `naive`, not `master`: master stopped in 2024
-	# and only diverged by a README edit. The pin is a `naive` commit, so
-	# comparing master would report a permanent false positive.
-	forwardproxy_sha="$(gh api repos/klzgrad/forwardproxy/commits/naive --jq .sha)" \
+	# The fork is the source of truth because fork-sync.yml auto-syncs it from
+	# upstream, so its head is the commit the build would eventually follow.
+	# The branch is `naive`, not `master`: master stopped in 2024 and diverged
+	# only by a README edit, so a master comparison reports a permanent false
+	# positive. The pin is a `naive` commit.
+	forwardproxy_sha="$(gh api repos/olst57/forwardproxy/commits/naive --jq .sha)" \
 		|| die "forwardproxy commit lookup failed"
-	caddy_l4_sha="$(gh api repos/mholt/caddy-l4/commits/master --jq .sha)" \
+	# The caddy-l4 fork mirrors upstream `master`.
+	caddy_l4_sha="$(gh api repos/olst57/caddy-l4/commits/master --jq .sha)" \
 		|| die "caddy-l4 commit lookup failed"
 	xcaddy_version="$(gh api repos/caddyserver/xcaddy/releases/latest --jq .tag_name)" \
 		|| die "xcaddy release lookup failed"
