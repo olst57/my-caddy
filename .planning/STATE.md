@@ -1,20 +1,20 @@
 ---
 gsd_state_version: "1.0"
 milestone: v0.5.0
-milestone_name: REALITY closure and E2E regression harness
 current_phase: 06
 current_phase_name: Stability smoke, evidence, and release decision
 status: complete
 stopped_at: README rewritten for v0.5.0, the release set cut to v0.5.0 plus v0.4.3, and the prune executed on the remote.
-last_updated: "2026-11-11T13:53:46.775Z"
+last_updated: "2026-11-12T01:18:37.049Z"
 last_activity: 2026-11-11
 last_activity_desc: Moved upstream-watch to the 1st and 15th, sourced the two module pins from the forks, and made both watch workflows stay quiet while an issue is open
-state_head: 8a584d8b6d05e0b80f5e9b9959bb0c440072700e
+state_head: 1f1b125f873615a032e80ff00444062a28455f09
 progress:
   total_phases: 3
   completed_phases: 3
   total_plans: 9
   completed_plans: 9
+milestone_name: REALITY closure and E2E regression harness
 ---
 
 # Project State
@@ -35,9 +35,9 @@ read-only inputs.
 Phase: 06 — Stability smoke, evidence, and release decision
 Plan: 06-03 — Re-run both suites and decide on publication
 Status: Complete — owner approved, `v0.5.0` tagged and published
-Last activity: 2026-11-11 — upstream-watch moved to the 1st and 15th, the two
-module pins now come from the forks, and both watch workflows stay quiet while
-their tracking issue is open
+Last activity: 2026-11-12 — the README rewritten from scratch as a 339-line
+landing document with an ASCII routing diagram, a repository map and a limits
+section, under quick task `261112-bzt`
 
 ## Performance Metrics
 
@@ -154,6 +154,7 @@ affecting current work:
 | 261106-wsw | Pin Go 1.26.9 to match the official naiveproxy Caddy build | 2026-11-07 | decb4cf | complete | [261106-wsw-pin-go-1-26-9-to-match-naiveproxy-offici](./quick/261106-wsw-pin-go-1-26-9-to-match-naiveproxy-offici/) |
 | 261106-tfx | Close the v0.4.3 follow-ups: pin fork SHAs, execute arm64, conclude licenses | 2026-11-06 | db05ba0 | complete | [261106-tfx-close-v0-4-3-follow-ups-pin-fork-shas-ex](./quick/261106-tfx-close-v0-4-3-follow-ups-pin-fork-shas-ex/) |
 | 261111-u68 | Run the upstream watch twice monthly from the forks and stay quiet while an issue is open | 2026-11-11 | 8a584d8 | complete | [261111-u68-change-the-upstream-watch-workflow-to-ru](./quick/261111-u68-change-the-upstream-watch-workflow-to-ru/) |
+| 261112-bzt | Rewrite the README landing document | 2026-11-12 | d53de84, 1f1b125 | complete | [261112-bzt-rewrite-readme-md-for-the-my-caddy-proje](./quick/261112-bzt-rewrite-readme-md-for-the-my-caddy-proje/) |
 
 ## Deferred Items
 
