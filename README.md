@@ -64,10 +64,12 @@ There are three tracks. Pick the one that matches what you need.
 
 ### Track A: use a release
 
-Download four build assets from the release page: `caddy-linux-amd64`, `caddy-linux-arm64`,
-`SHA256SUMS` and `pins.txt`. The six licence and notice files on the release page are not listed in
-`SHA256SUMS`. From the directory that holds the downloads, run the checksum check; the names in
-`SHA256SUMS` are bare, so a check run elsewhere reports a failure.
+Download four build assets from the
+[latest release](https://github.com/olst57/my-caddy/releases): `caddy-linux-amd64`,
+`caddy-linux-arm64`, `SHA256SUMS` and `pins.txt`. `SHA256SUMS` covers the two
+binaries only; `pins.txt` and the six licence and notice files on the release page are not listed.
+From the directory that holds the downloads, run the checksum check; the names in `SHA256SUMS` are
+bare, so a check run elsewhere reports a failure.
 
 ```bash
 sha256sum -c SHA256SUMS
@@ -126,11 +128,11 @@ work. The order is semantic, not cosmetic.
 Everything the build consumes is a concrete value in `pins/build-inputs.env`, never a branch head and
 never a range.
 
-| Input | Pin |
+| Input | Consumed as |
 | --- | --- |
 | Caddy core | tag `v2.11.7` |
-| naive forward proxy | fork of `klzgrad/forwardproxy`, `naive` branch |
-| Layer 4 | fork of `mholt/caddy-l4`, `master` branch |
+| naive forward proxy | fork commit `PIN_FWDPROXY_SHA`, mirroring `klzgrad/forwardproxy` `naive` |
+| Layer 4 | fork commit `PIN_L4_SHA`, mirroring `mholt/caddy-l4` `master` |
 | xcaddy | `v0.4.7` |
 | Go | `1.26.9` |
 | Xray (probe only) | `v26.10.31` |
@@ -191,14 +193,14 @@ outside those paths, so run the build by hand afterwards.
 
 | Tier | Suite | Items | Needs | In CI |
 | --- | --- | --- | --- | --- |
-| Offline | `scripts/verify.sh` | 26 | `CADDY_BIN` and `jq` | Every push |
+| Offline | `scripts/verify.sh` | 26 | `CADDY_BIN` and `jq` | Every push and PR to `main` |
 | Coexistence | `tests/coexist/run.sh` | 8 | root, a free `:443`, one external TLS endpoint | After the offline job |
 | End to end | `tests/e2e/run.sh` | 11 | root, six test ports, a real destination, key material | Syntax check and `--negative-preflight` |
 
 **Offline, 26 items.** `scripts/verify.sh` reads the delivery configs and the repository's own
 invariants: the adapter output, the handler order, the credential positions, the pin copies, the
 licence set, and the `deploy/` freeze. It needs `CADDY_BIN` and `jq`, and nothing else: no listener,
-no root, no network. CI runs it on every push.
+no root, no network. CI runs it on every push and pull request against `main`.
 
 **Coexistence, 8 items.** `bash tests/coexist/run.sh .` starts the real binary on `:443` and asserts
 each role with a control next to the assertion: `CO-1` site leg, `CO-2` REALITY leg with a PROXY v2
@@ -223,8 +225,7 @@ recorded in `evidence/v0.4.3/arm64-release.log`. The `v0.5.0` amd64 asset has no
 the Linux test host: the release CDN download ran at roughly 19 KB/s there, so the 53 MB asset was
 deferred rather than half-transferred. The runtime numbers in `evidence/v0.5.0/` come from a locally
 built binary with the same pinned inputs, and the `v0.5.0` arm64 asset was not executed at all.
-Neither gap is upgraded to "verified" by this document. Executing an arm64 artifact is not the same
-as rebuilding it byte for byte.
+Neither gap is upgraded to "verified" by this document.
 
 ## Release assets
 
@@ -267,7 +268,7 @@ Do not add an `upstream` sub-directive to `forward_proxy`: setting one silently 
 
 Two scheduled workflows watch the outside world. Neither one changes what this repository builds.
 
-`scripts/check-upstream.sh` and `upstream-watch.yml` run on the 1st and 15th at 01:00 UTC. The Caddy
+`upstream-watch.yml` runs `scripts/check-upstream.sh` on the 1st and 15th at 01:00 UTC. The Caddy
 and `xcaddy` tags come from upstream releases; the two module SHAs come from this project's own forks
 (`github.com/olst57/forwardproxy` on `naive`,
 `github.com/olst57/caddy-l4` on `master`), which are auto-synced from upstream, so the
@@ -276,11 +277,11 @@ fork head is the commit the build would eventually follow. The check never edits
 gate run first. While its tracking issue is already open, later runs stay silent: no comment, no
 edit, no duplicate.
 
-`scripts/check-forks.sh` and `fork-sync.yml` run daily at 01:30 UTC, fast-forward the two module
-forks when a `FORK_SYNC_TOKEN` token is configured, and report otherwise. They also stay silent while
-their issue is already open. A sync never moves a pin, so it cannot change the binary. The forks
-exist so that no upstream push can change what this repository produces. The cost: no upstream fixes
-until the fork is synced. GitHub may start a scheduled run late, so these are cadences, not exact
+`fork-sync.yml` runs `scripts/check-forks.sh` daily at 01:30 UTC; it fast-forwards the two module
+forks when `FORK_SYNC_TOKEN` is configured, and reports otherwise. It also stays silent while its
+issue is already open. A sync never moves a pin, so it cannot change the binary. The forks exist so
+that no upstream push can change what this repository produces. The cost: no upstream fixes until
+the fork is synced. GitHub may start a scheduled run late, so these are cadences, not exact
 wall-clock delivery times.
 
 ## Repository map
@@ -310,7 +311,8 @@ release is the changelog, not this file.
   a concrete value is needed, read the redacted placeholders in `deploy/` and `docs/`.
 - Byte-identical rebuilds are not established: the toolchain is pinned, but two clean builds of the
   same commit with the same inputs have not been compared, and build paths, build IDs and other
-  compiler inputs may still differ.
+  compiler inputs may still differ. Running a published artifact is not the same as rebuilding it
+  byte for byte.
 - HTTP/3 is not claimed. The delivery config turns it off, and earlier local H3 measurements predate
   the pin.
 - The execution-coverage gaps above are stated, not upgraded: the `v0.5.0` amd64 asset was not run on
