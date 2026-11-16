@@ -4,7 +4,9 @@ Three roles — a website reverse proxy, an in-process naive proxy, and an
 SNI-routed REALITY+Vision passthrough — run on one binary, one Caddyfile, and one
 `:443` listener.
 
-The current baseline is `v0.5.0`.
+The current baseline is `v0.5.0`. `v0.5.1` is a special pin-only build — Layer 4 pinned to the
+upstream `mholt/caddy-l4` `v0.1.3` release commit and the Xray probe at `v26.11.9` — and does not
+replace the baseline.
 
 - [What this is](#what-this-is)
 - [Routing](#routing)
@@ -303,8 +305,10 @@ wall-clock delivery times.
 `v0.4.0` was the first release with all three roles on one port, and it carried a site-level
 `basic_auth` defect plus fork refs that resolved to live branch heads. `v0.4.3` removed the defect,
 pinned both fork commits, and added the arm64 execution record. `v0.5.0` closed REALITY with the E2E
-harness and the redacted `evidence/v0.5.0/` capture set. Earlier tags are retired; the body of each
-release is the changelog, not this file.
+harness and the redacted `evidence/v0.5.0/` capture set. `v0.5.1` is a special pin-only build —
+upstream Layer 4 `v0.1.3` release commit and Xray `v26.11.9`, with Caddy, forwardproxy, xcaddy and Go
+unchanged — and is not a new baseline. Earlier tags are retired; the body of each release is the
+changelog, not this file.
 
 ## Limits and non-claims
 
