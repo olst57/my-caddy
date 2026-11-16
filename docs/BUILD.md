@@ -54,7 +54,7 @@ what a run actually compiled:
 caddy_tag=v2.11.7
 caddy_source_head=72dd0fb067f6d7826c7f79907670ba4a713bfe37
 forwardproxy_sha=e747854e78743dba85c039b38ed185fb11d93667
-caddy_l4_sha=96e1a6bf063c206c3bd09ca6dc4a0484a158d83f
+caddy_l4_sha=eafc300ef23bcb2a28cc329a18e1e98bcd2b7cee
 xcaddy_version=v0.4.7
 go_version=go1.26.9
 patch=caddy-read-idle-timeout.patch
@@ -97,12 +97,15 @@ artifact is built and again in `build` after both architectures are built.
 
 ### Knowing when upstream moves
 
-`scripts/check-upstream.sh` compares every pin with what the build would follow:
-the Caddy and `xcaddy` release tags and the latest stable Go release from
-upstream, but the two module SHAs from this project's own forks
-(`olst57/forwardproxy` on `naive`, `olst57/caddy-l4` on
-`master`). `fork-sync.yml` auto-syncs both forks, so the fork head is the commit
-the build would eventually follow. The check only reports. It never edits
+`scripts/check-upstream.sh` compares every pin with the upstream release tags
+and the two fork branch heads: the Caddy and `xcaddy` release tags and the
+latest stable Go release from upstream, but the two module SHAs from this
+project's own forks (`olst57/forwardproxy` on `naive`,
+`olst57/caddy-l4` on `master`). `fork-sync.yml` auto-syncs both
+forks, so the fork head is what the watcher compares against. The caddy-l4 pin
+is deliberately the upstream `v0.1.3` release commit, not the fork `master` head
+(two commits ahead), so the watcher will report it stale until a later bump
+adopts a newer release commit. The check only reports. It never edits
 `pins/build-inputs.env`, because a bump has to prove that the read-idle-timeout
 patch still applies and that both forks were synced before their commits move.
 

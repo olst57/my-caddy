@@ -4,7 +4,9 @@ This document records the license conclusion for every component that is
 linked into the delivery binary, plus the two open decisions that belong to the
 repository owner. The evidence is the upstream `LICENSE` file fetched at the
 pinned commit or tag on 2026-11-06, not a recollection of what a project
-usually uses.
+usually uses. The caddy-l4 and Xray-core rows were
+re-checked at their new releases on 2026-11-16, and both license texts are
+byte-identical to the copies already in `LICENSES/`.
 
 ## Method
 
@@ -15,12 +17,12 @@ below, decoded, and hashed. The hash is the check that the text in
 | Component | Ref | `LICENSE` sha256 (first 12) | SPDX |
 | --- | --- | --- | --- |
 | Caddy | `v2.11.7` | `cfc7749b96f6` | Apache-2.0 |
-| caddy-l4 | `96e1a6bf063c` | `cfc7749b96f6` | Apache-2.0 |
+| caddy-l4 | `eafc300ef23b` | `cfc7749b96f6` | Apache-2.0 |
 | forwardproxy | `e747854e7874` | `cfc7749b96f6` | Apache-2.0 |
 | xcaddy | `v0.4.7` | `58d1e17ffe51` | Apache-2.0 |
 | quic-go | `v0.63.0` | `77d0b7b53e8a` | MIT |
 | Go | `go1.26.10` | `911f8f578293` | BSD-3-Clause |
-| Xray-core | `v26.10.31` | `1f256ecad192` | MPL-2.0 |
+| Xray-core | `v26.11.9` | `1f256ecad192` | MPL-2.0 |
 
 Caddy has no `NOTICE` file at `v2.11.7` (the contents API returns 404), so
 Apache-2.0 section 4(d) adds nothing beyond the license text itself.

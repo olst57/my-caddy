@@ -132,10 +132,10 @@ never a range.
 | --- | --- |
 | Caddy core | tag `v2.11.7` |
 | naive forward proxy | fork commit `PIN_FWDPROXY_SHA`, mirroring `klzgrad/forwardproxy` `naive` |
-| Layer 4 | fork commit `PIN_L4_SHA`, mirroring `mholt/caddy-l4` `master` |
+| Layer 4 | commit `PIN_L4_SHA`, the upstream `mholt/caddy-l4` `v0.1.3` release commit (fork `master` head is two commits ahead) |
 | xcaddy | `v0.4.7` |
 | Go | `1.26.9` |
-| Xray (probe only) | `v26.10.31` |
+| Xray (probe only) | `v26.11.9` |
 
 `pins/build-inputs.env` is the single source of truth. It records the exact 40-hex commits in
 `PIN_CADDY_COMMIT`, `PIN_FWDPROXY_SHA` and `PIN_L4_SHA`. Branch names are not build inputs: the
@@ -272,9 +272,10 @@ Two scheduled workflows watch the outside world. Neither one changes what this r
 and `xcaddy` tags come from upstream releases; the two module SHAs come from this project's own forks
 (`github.com/olst57/forwardproxy` on `naive`,
 `github.com/olst57/caddy-l4` on `master`), which are auto-synced from upstream, so the
-fork head is the commit the build would eventually follow. The check never edits
-`pins/build-inputs.env` and never starts a build: a bump needs a fork sync, a patch check and a full
-gate run first. While its tracking issue is already open, later runs stay silent: no comment, no
+fork head is what the watcher compares against. The Layer 4 pin is the upstream `mholt/caddy-l4`
+`v0.1.3` release commit, so the watcher will deliberately report it stale while the fork `master`
+head stays ahead. The check never edits `pins/build-inputs.env` and never starts a build: a bump
+needs a fork sync, a patch check and a full gate run first. While its tracking issue is already open, later runs stay silent: no comment, no
 edit, no duplicate.
 
 `fork-sync.yml` runs `scripts/check-forks.sh` daily at 01:30 UTC; it fast-forwards the two module
