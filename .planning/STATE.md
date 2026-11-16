@@ -35,9 +35,11 @@ read-only inputs.
 Phase: 06 — Stability smoke, evidence, and release decision
 Plan: 06-03 — Re-run both suites and decide on publication
 Status: Complete — owner approved, `v0.5.0` tagged and published
-Last activity: 2026-11-16 — `PIN_L4_SHA` moved to the upstream `caddy-l4`
-`v0.1.3` release commit `eafc300e…` and `PIN_XRAY_VERSION` to `v26.11.9`;
-Caddy, forwardproxy, xcaddy and Go stayed fixed, under quick task `261116-v24`
+Last activity: 2026-11-16 — `v0.5.1` published as a special pin-only build:
+`PIN_L4_SHA` is the upstream `caddy-l4` `v0.1.3` release commit `eafc300e…`,
+`PIN_XRAY_VERSION` is `v26.11.9`, and Caddy, forwardproxy, xcaddy and Go stayed
+fixed. `gate0` and `verify` passed at `6d6d98d`; the release build attached ten
+assets. `v0.5.0` remains the mainline baseline.
 
 ## Performance Metrics
 
