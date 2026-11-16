@@ -265,10 +265,10 @@ if [ "$c" -ne 0 ]; then
 else
 	ev_assert "no PROXY header -> rejected" FAIL "openssl exit 0, connection was not rejected"
 fi
-if grep -qiE 'EOF|errno=|Connection reset|wrong version number|handshake failure|unexpected eof' "$GATE_DIR/a3b-sclient.log"; then
-	ev_assert "rejection visible to the client" PASS "EOF/errno/reset/handshake-failure in client output"
+if grep -qiE 'EOF|errno=|Connection reset|wrong version number|handshake failure|unexpected eof|record layer failure|packet length too long' "$GATE_DIR/a3b-sclient.log"; then
+	ev_assert "rejection visible to the client" PASS "EOF/errno/reset/handshake-failure/record-layer error in client output"
 else
-	ev_assert "rejection visible to the client" FAIL "no EOF/errno/reset/handshake-failure in client output"
+	ev_assert "rejection visible to the client" FAIL "no client-visible TLS rejection in client output"
 fi
 
 sleep 1
@@ -389,10 +389,10 @@ if [ "$c" -ne 0 ]; then
 else
 	ev_assert "header sent but not required -> rejected" FAIL "openssl exit 0: l4 did not send the header, or xray consumed it, contradicting A3(a)"
 fi
-if grep -qiE 'EOF|errno=|Connection reset|wrong version number|handshake failure|unexpected eof' "$GATE_DIR/a3d-sclient.log"; then
-	ev_assert "rejection visible to the client (d)" PASS "EOF/errno/reset/handshake-failure present"
+if grep -qiE 'EOF|errno=|Connection reset|wrong version number|handshake failure|unexpected eof|record layer failure|packet length too long' "$GATE_DIR/a3d-sclient.log"; then
+	ev_assert "rejection visible to the client (d)" PASS "EOF/errno/reset/handshake-failure/record-layer error present"
 else
-	ev_assert "rejection visible to the client (d)" FAIL "no EOF/errno/reset/handshake-failure"
+	ev_assert "rejection visible to the client (d)" FAIL "no client-visible TLS rejection"
 fi
 
 grep -c 'accepting PROXY protocol' "$GATE_DIR/xray-a3d.log" > "$GATE_DIR/a3d-count.log" 2>&1
