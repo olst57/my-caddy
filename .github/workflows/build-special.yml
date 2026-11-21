@@ -1,0 +1,92 @@
+name: build-special
+
+# Artifact-only special build: Caddy v2.11.9 plus ONLY the forwardproxy module.
+#
+# This is not the delivery build (build.yml / scripts/build.sh). There is no
+# patch and no source-replacement flag because Caddy v2.11.9 already ships the
+# idle-timeout override API, and there is no layer 4 module. There is no
+# release upload, tag, signing or container step; the only trigger is a manual
+# dispatch.
+#
+# scripts/verify.sh hardcodes v2.11.7 and must never be pointed at this binary.
+# The artifact names carry the caddy-special- prefix and the receipt records
+# patch=none, so this build cannot be mistaken for delivery evidence.
+#
+# The three action commits below are copied from build.yml so both workflows
+# resolve exactly the same action code.
+
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: Architecture to build
+        required: false
+        default: all
+        type: choice
+        options:
+          - all
+          - amd64
+          - arm64
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: 1.26.9
+
+jobs:
+  build-special:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Build the special binary
+        env:
+          ARCH: ${{ inputs.arch }}
+        run: bash scripts/build-special.sh --arch "$ARCH"
+      - name: Receipt agrees with the special pins file
+        # Inline on purpose: tests/pins/check.sh knows only the seven delivery
+        # PIN_ keys and cannot read the special receipt.
+        run: |
+          set -euo pipefail
+          . pins/special-build-inputs.env
+          grep -Fqx "caddy_tag=$SPECIAL_CADDY_TAG" dist/special-pins.txt
+          grep -Fqx "caddy_source_head=$SPECIAL_CADDY_COMMIT" dist/special-pins.txt
+          grep -Fqx "forwardproxy_sha=$SPECIAL_FWDPROXY_SHA" dist/special-pins.txt
+          grep -Fqx "xcaddy_version=$SPECIAL_XCADDY_VERSION" dist/special-pins.txt
+          grep -Fqx "go_version=go$SPECIAL_GO_VERSION" dist/special-pins.txt
+          grep -Fqx "patch=none" dist/special-pins.txt
+          grep -Fqx "modules_asserted=http.handlers.forward_proxy" dist/special-pins.txt
+      - name: Show checksums and receipt
+        run: |
+          cat dist/SHA256SUMS
+          cat dist/special-pins.txt
+      - name: Verify the artifact set
+        env:
+          ARCH: ${{ inputs.arch }}
+        # ARCH is a closed choice from workflow_dispatch; it is re-validated
+        # here so an unexpected value fails instead of uploading nothing.
+        run: |
+          set -euo pipefail
+          case "$ARCH" in
+          all) archs="amd64 arm64" ;;
+          amd64|arm64) archs="$ARCH" ;;
+          *) echo "::error::unknown arch '$ARCH'"; exit 1 ;;
+          esac
+          for a in $archs; do
+            f="dist/caddy-special-linux-$a"
+            [ -f "$f" ] || { echo "::error::missing $f"; exit 1; }
+            file "$f"
+          done
+          ( cd dist && sha256sum -c SHA256SUMS )
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: caddy-special-linux
+          path: |
+            dist/caddy-special-linux-amd64
+            dist/caddy-special-linux-arm64
+            dist/SHA256SUMS
+            dist/special-pins.txt
+          if-no-files-found: error

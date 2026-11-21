@@ -5,10 +5,10 @@ current_phase: 06
 current_phase_name: Stability smoke, evidence, and release decision
 status: complete
 stopped_at: README rewritten for v0.5.0, the release set cut to v0.5.0 plus v0.4.3, and the prune executed on the remote.
-last_updated: "2026-11-16T14:38:34.560Z"
-last_activity: 2026-11-12
+last_updated: "2026-11-21T14:58:24.114Z"
+last_activity: 2026-11-16
 last_activity_desc: Moved upstream-watch to the 1st and 15th, sourced the two module pins from the forks, and made both watch workflows stay quiet while an issue is open
-state_head: 6d4e791e639b70363255e8b7727c300f7d602fac
+state_head: c146b9ed2fc05e41e151273225d9e78fab2c8409
 progress:
   total_phases: 3
   completed_phases: 3
@@ -158,6 +158,7 @@ affecting current work:
 | 261111-u68 | Run the upstream watch twice monthly from the forks and stay quiet while an issue is open | 2026-11-11 | 8a584d8 | complete | [261111-u68-change-the-upstream-watch-workflow-to-ru](./quick/261111-u68-change-the-upstream-watch-workflow-to-ru/) |
 | 261112-bzt | Rewrite the README landing document | 2026-11-12 | d53de84, 1f1b125 | complete | [261112-bzt-rewrite-readme-md-for-the-my-caddy-proje](./quick/261112-bzt-rewrite-readme-md-for-the-my-caddy-proje/) |
 | 261116-v24 | Bump the Layer 4 pin to the upstream v0.1.3 release commit and Xray to v26.11.9, keeping Caddy, forwardproxy, xcaddy and Go fixed | 2026-11-16 | 6d4e791 | complete | [261116-v24-bump-two-delivery-pins-only-keep-everyth](./quick/261116-v24-bump-two-delivery-pins-only-keep-everyth/) |
+| 261121-v37 | Build a special Caddy v2.11.9 artifact with only the forwardproxy module on GitHub Actions | 2026-11-21 | c146b9e | complete | [261121-v37-special-caddy-build-on-github-actions-bu](./quick/261121-v37-special-caddy-build-on-github-actions-bu/) |
 
 ## Deferred Items
 
